@@ -1,7 +1,8 @@
-package meta
+package collections
 
 import (
-	"CouloyDB/data"
+	"github.com/Kirov7/CouloyDB/data"
+	"github.com/Kirov7/CouloyDB/meta"
 	"github.com/google/btree"
 	"sync"
 )
@@ -20,9 +21,9 @@ func NewBTree() *BTree {
 }
 
 func (bt *BTree) Put(key []byte, pos *data.LogRecordPos) bool {
-	item := &Item{
-		key: key,
-		pos: pos,
+	item := &meta.Item{
+		Key: key,
+		Pos: pos,
 	}
 	bt.lock.Lock()
 	defer bt.lock.Unlock()
@@ -32,8 +33,8 @@ func (bt *BTree) Put(key []byte, pos *data.LogRecordPos) bool {
 }
 
 func (bt *BTree) Get(key []byte) *data.LogRecordPos {
-	item := &Item{
-		key: key,
+	item := &meta.Item{
+		Key: key,
 	}
 	bt.lock.Lock()
 	defer bt.lock.Unlock()
@@ -42,12 +43,12 @@ func (bt *BTree) Get(key []byte) *data.LogRecordPos {
 	if value == nil {
 		return nil
 	}
-	return value.(*Item).pos
+	return value.(*meta.Item).Pos
 }
 
 func (bt *BTree) Del(key []byte) bool {
-	item := &Item{
-		key: key,
+	item := &meta.Item{
+		Key: key,
 	}
 	bt.lock.Lock()
 	defer bt.lock.Unlock()
