@@ -17,7 +17,7 @@ type DB struct {
 	activityFile *data.DataFile
 	oldFile      map[uint32]*data.DataFile
 	index        meta.MemIndex
-	lock         *sync.RWMutex
+	mu           *sync.RWMutex
 }
 
 func NewCouloyDB(opt Options) (*DB, error) {
@@ -38,7 +38,7 @@ func NewCouloyDB(opt Options) (*DB, error) {
 		options: opt,
 		oldFile: make(map[uint32]*data.DataFile),
 		index:   meta.NewIndexer(opt.IndexerType),
-		lock:    new(sync.RWMutex),
+		mu:      new(sync.RWMutex),
 	}
 
 	// Load DataFile and index
@@ -69,8 +69,8 @@ func (db *DB) Put(key, value []byte) error {
 }
 
 func (db *DB) Get(key []byte) ([]byte, error) {
-	db.lock.RLock()
-	defer db.lock.RUnlock()
+	db.mu.RLock()
+	defer db.mu.RUnlock()
 	if len(key) == 0 {
 		return nil, ErrKeyIsEmpty
 	}
@@ -78,24 +78,8 @@ func (db *DB) Get(key []byte) ([]byte, error) {
 	if pos == nil {
 		return nil, ErrKeyNotFound
 	}
-	var dataFile *data.DataFile
-	if db.activityFile.FileId == pos.Fid {
-		dataFile = db.activityFile
-	} else {
-		dataFile = db.oldFile[pos.Fid]
-	}
-	if dataFile == nil {
-		return nil, ErrKeyNotFound
-	}
 
-	logRecord, _, err := dataFile.ReadLogRecord(pos.Offset)
-	if err != nil {
-		return nil, err
-	}
-	if logRecord.Type == data.LogRecordDeleted {
-		return nil, ErrKeyNotFound
-	}
-	return logRecord.Value, nil
+	return db.getValueByPos(pos)
 }
 
 func (db *DB) Del(key []byte) error {
@@ -122,9 +106,67 @@ func (db *DB) Del(key []byte) error {
 	return nil
 }
 
+// ListKeys get all the key and return
+func (db *DB) ListKeys() [][]byte {
+	iterator := db.index.Iterator(false)
+	keys := make([][]byte, db.index.Count())
+	var idx int
+	for iterator.Rewind(); iterator.Valid(); iterator.Next() {
+		keys[idx] = iterator.Key()
+	}
+	return keys
+}
+
+// Fold gets all the keys and executes the function passed in by the user.
+// Terminates the traversal when the function returns false
+func (db *DB) Fold(fn func(key []byte, value []byte) bool) error {
+	db.mu.RLock()
+	defer db.mu.RUnlock()
+
+	iterator := db.index.Iterator(false)
+	for iterator.Rewind(); iterator.Valid(); iterator.Next() {
+		value, err := db.getValueByPos(iterator.Value())
+		if err != nil {
+			return err
+		}
+		if !fn(iterator.Key(), value) {
+			break
+		}
+	}
+	return nil
+}
+
+func (db *DB) Close() error {
+	if db.activityFile == nil {
+		return nil
+	}
+	db.mu.Lock()
+	defer db.mu.Unlock()
+
+	if err := db.activityFile.Close(); err != nil {
+		return err
+	}
+
+	for _, file := range db.oldFile {
+		if err := file.Close(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (db *DB) Sync() error {
+	if db.activityFile == nil {
+		return nil
+	}
+	db.mu.Lock()
+	defer db.mu.Unlock()
+	return db.activityFile.Sync()
+}
+
 func (db *DB) appendLogRecord(log *data.LogRecord) (*data.LogRecordPos, error) {
-	db.lock.Lock()
-	defer db.lock.Unlock()
+	db.mu.Lock()
+	defer db.mu.Unlock()
 
 	if db.activityFile == nil {
 		if err := db.setActivityFile(); err != nil {
@@ -265,4 +307,25 @@ func (db *DB) loadIndex(fids []int) error {
 		}
 	}
 	return nil
+}
+
+func (db *DB) getValueByPos(pos *data.LogRecordPos) ([]byte, error) {
+	var dataFile *data.DataFile
+	if db.activityFile.FileId == pos.Fid {
+		dataFile = db.activityFile
+	} else {
+		dataFile = db.oldFile[pos.Fid]
+	}
+	if dataFile == nil {
+		return nil, ErrKeyNotFound
+	}
+
+	logRecord, _, err := dataFile.ReadLogRecord(pos.Offset)
+	if err != nil {
+		return nil, err
+	}
+	if logRecord.Type == data.LogRecordDeleted {
+		return nil, ErrKeyNotFound
+	}
+	return logRecord.Value, nil
 }

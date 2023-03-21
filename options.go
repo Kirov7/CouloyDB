@@ -1,10 +1,19 @@
 package CouloyDB
 
-import "github.com/Kirov7/CouloyDB/meta"
-
 type Options struct {
 	DirPath      string
 	DataFileSize int64
-	IndexerType  meta.IndexType
+	IndexerType  IndexType
 	SyncWrites   bool
 }
+
+type IteratorOptions struct {
+	Prefix  []byte
+	Reverse bool
+}
+
+type IndexType = int8
+
+const (
+	Btree IndexType = iota
+)
