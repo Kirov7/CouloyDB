@@ -1,6 +1,7 @@
 package CouloyDB
 
 import (
+	"encoding/binary"
 	"errors"
 	"github.com/Kirov7/CouloyDB/data"
 	"github.com/Kirov7/CouloyDB/meta"
@@ -10,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 )
 
 type DB struct {
@@ -18,6 +20,7 @@ type DB struct {
 	oldFile      map[uint32]*data.DataFile
 	index        meta.MemIndex
 	mu           *sync.RWMutex
+	txId         uint64
 }
 
 func NewCouloyDB(opt Options) (*DB, error) {
@@ -54,11 +57,11 @@ func (db *DB) Put(key, value []byte) error {
 		return ErrKeyIsEmpty
 	}
 	logRecord := &data.LogRecord{
-		Key:   key,
+		Key:   encodeKeyWithTxId(key, NO_TX_ID),
 		Value: value,
 		Type:  data.LogRecordNormal,
 	}
-	pos, err := db.appendLogRecord(logRecord)
+	pos, err := db.appendLogRecordWithLock(logRecord)
 	if err != nil {
 		return err
 	}
@@ -92,9 +95,12 @@ func (db *DB) Del(key []byte) error {
 	}
 
 	// Build deleted tags LogRecord
-	logRecord := &data.LogRecord{Key: key, Type: data.LogRecordDeleted}
+	logRecord := &data.LogRecord{
+		Key:  encodeKeyWithTxId(key, NO_TX_ID),
+		Type: data.LogRecordDeleted,
+	}
 
-	_, err := db.appendLogRecord(logRecord)
+	_, err := db.appendLogRecordWithLock(logRecord)
 	if err != nil {
 		return err
 	}
@@ -164,9 +170,13 @@ func (db *DB) Sync() error {
 	return db.activityFile.Sync()
 }
 
-func (db *DB) appendLogRecord(log *data.LogRecord) (*data.LogRecordPos, error) {
+func (db *DB) appendLogRecordWithLock(log *data.LogRecord) (*data.LogRecordPos, error) {
 	db.mu.Lock()
 	defer db.mu.Unlock()
+	return db.appendLogRecord(log)
+}
+
+func (db *DB) appendLogRecord(log *data.LogRecord) (*data.LogRecordPos, error) {
 
 	if db.activityFile == nil {
 		if err := db.setActivityFile(); err != nil {
@@ -270,6 +280,25 @@ func (db *DB) loadIndex(fids []int) error {
 	if len(fids) == 0 {
 		return nil
 	}
+
+	updateIndex := func(key []byte, typ data.LogRecordType, pos *data.LogRecordPos) {
+		var ok bool
+		if typ == data.LogRecordDeleted {
+			ok = db.index.Del(key)
+		} else {
+			ok = db.index.Put(key, pos)
+		}
+		if !ok {
+			panic("update index failed at update")
+			//return ErrUpdateIndexFailed
+		}
+	}
+
+	// a map to store the Record data in tx temporarily
+	// txId -> recordList
+	txRecords := make(map[uint64][]*data.TxRecord)
+	var curTxId = NO_TX_ID
+
 	// Iterate through all the file ids and process the records in the file
 	for i, fid := range fids {
 		var fileId = uint32(fid)
@@ -291,10 +320,31 @@ func (db *DB) loadIndex(fids []int) error {
 
 			// Building in-memory indexes
 			logRecordPos := &data.LogRecordPos{Fid: fileId, Offset: offset}
-			if logRecord.Type == data.LogRecordDeleted {
-				db.index.Del(logRecord.Key)
+
+			realKey, txId := parseLogRecordKey(logRecord.Key)
+			if txId == NO_TX_ID {
+				// if not in tx, update memIndex directly
+				updateIndex(realKey, logRecord.Type, logRecordPos)
 			} else {
-				db.index.Put(logRecord.Key, logRecordPos)
+				// if the tx has finished, update to memIndex
+				if logRecord.Type == data.LogRecordTxnFin {
+					for _, txRecord := range txRecords[txId] {
+						updateIndex(txRecord.Record.Key, txRecord.Record.Type, txRecord.Pos)
+
+					}
+					delete(txRecords, txId)
+				} else {
+					//
+					logRecord.Key = realKey
+					txRecords[txId] = append(txRecords[txId], &data.TxRecord{
+						Record: logRecord,
+						Pos:    logRecordPos,
+					})
+				}
+				// update txId
+				if txId > curTxId {
+					curTxId = txId
+				}
 			}
 
 			// Increment the offset, starting from the new position
@@ -306,6 +356,7 @@ func (db *DB) loadIndex(fids []int) error {
 			db.activityFile.WriteOff = offset
 		}
 	}
+	db.txId = curTxId
 	return nil
 }
 
@@ -328,4 +379,15 @@ func (db *DB) getValueByPos(pos *data.LogRecordPos) ([]byte, error) {
 		return nil, ErrKeyNotFound
 	}
 	return logRecord.Value, nil
+}
+
+// prase LogRecord's Key and get the real key with txId
+func parseLogRecordKey(key []byte) ([]byte, uint64) {
+	txId, n := binary.Uvarint(key)
+	realKey := key[n:]
+	return realKey, txId
+}
+
+func (db *DB) GetTxId() uint64 {
+	return atomic.AddUint64(&db.txId, 1)
 }

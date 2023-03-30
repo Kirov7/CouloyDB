@@ -12,6 +12,11 @@ type IteratorOptions struct {
 	Reverse bool
 }
 
+type WriteBatchOptions struct {
+	MaxBatchNum uint32
+	SyncWrites  bool
+}
+
 type IndexType = int8
 
 const (

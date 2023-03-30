@@ -10,6 +10,7 @@ type LogRecordType = byte
 const (
 	LogRecordNormal LogRecordType = iota
 	LogRecordDeleted
+	LogRecordTxnFin
 )
 const (
 	// crc type keySize ValueSize
@@ -98,4 +99,10 @@ func GetLogRecordCRC(lr *LogRecord, header []byte) uint32 {
 	crc = crc32.Update(crc, crc32.IEEETable, lr.Value)
 
 	return crc
+}
+
+// TxRecord Transaction data temporarily stored in memory
+type TxRecord struct {
+	Record *LogRecord
+	Pos    *LogRecordPos
 }
