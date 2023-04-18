@@ -13,7 +13,9 @@ var (
 	ErrInvalidCRC = errors.New("invalid crc value, logRecord maybe corrupted")
 )
 
-const DataFileNameSuffix = ".cly"
+const DataFileNameSuffix = ".kly"
+const HintFileName = "hint-index"
+const MergeFinishedFileName = "merge-finished"
 
 type DataFile struct {
 	FileId    uint32
@@ -24,6 +26,26 @@ type DataFile struct {
 // OpenDataFile Open new datafile
 func OpenDataFile(dirPath string, fileId uint32) (*DataFile, error) {
 	fileName := filepath.Join(dirPath, fmt.Sprintf("%09d", fileId)+DataFileNameSuffix)
+	return newDataFile(fileName, fileId)
+}
+
+// OpenHintFile Open new datafile
+func OpenHintFile(dirPath string) (*DataFile, error) {
+	fileName := filepath.Join(dirPath, HintFileName)
+	return newDataFile(fileName, 0)
+}
+
+// OpenMergeFinishedFile Open new datafile
+func OpenMergeFinishedFile(dirPath string) (*DataFile, error) {
+	fileName := filepath.Join(dirPath, MergeFinishedFileName)
+	return newDataFile(fileName, 0)
+}
+
+func GetDataFileName(dirPath string, fileId uint32) string {
+	return filepath.Join(dirPath, fmt.Sprintf("%09d", fileId)+DataFileNameSuffix)
+}
+
+func newDataFile(fileName string, fileId uint32) (*DataFile, error) {
 	ioManager, err := driver.NewIOManager(fileName)
 	if err != nil {
 		return nil, err
@@ -82,6 +104,16 @@ func (df *DataFile) ReadLogRecord(offset int64) (*LogRecord, int64, error) {
 		return nil, 0, ErrInvalidCRC
 	}
 	return logRecord, recordSize, nil
+}
+
+// WriteHintRecord write the index info to the hint file
+func (df *DataFile) WriteHintRecord(key []byte, pos *LogPos) error {
+	record := &LogRecord{
+		Key:   key,
+		Value: EncodeLogRecordPos(pos),
+	}
+	encRecord, _ := EncodeLogRecord(record)
+	return df.Write(encRecord)
 }
 
 func (df *DataFile) Sync() error {

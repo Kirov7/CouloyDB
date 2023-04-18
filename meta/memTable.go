@@ -2,17 +2,22 @@ package meta
 
 import (
 	"bytes"
-	"github.com/Kirov7/CouloyDB"
 	"github.com/Kirov7/CouloyDB/data"
 	"github.com/google/btree"
 )
 
-type MemIndex interface {
+type MemTableType = int8
+
+const (
+	Btree MemTableType = iota
+)
+
+type MemTable interface {
 	// Put Stores the Pos information for key pairs in the index
-	Put(key []byte, pos *data.LogRecordPos) bool
+	Put(key []byte, pos *data.LogPos) bool
 
 	// Get Retrieve the Pos information based on the key
-	Get(key []byte) *data.LogRecordPos
+	Get(key []byte) *data.LogPos
 
 	// Del Delete the Pos information based on the key
 	Del(key []byte) bool
@@ -24,9 +29,9 @@ type MemIndex interface {
 	Count() int
 }
 
-func NewIndexer(typ CouloyDB.IndexType) MemIndex {
+func NewMemTable(typ MemTableType) MemTable {
 	switch typ {
-	case CouloyDB.Btree:
+	case Btree:
 		return NewBTree()
 	default:
 		return NewBTree()
@@ -35,7 +40,7 @@ func NewIndexer(typ CouloyDB.IndexType) MemIndex {
 
 type Item struct {
 	Key []byte
-	Pos *data.LogRecordPos
+	Pos *data.LogPos
 }
 
 func (i *Item) Less(bi btree.Item) bool {
@@ -49,6 +54,6 @@ type Iterator interface {
 	Next()
 	Valid() bool
 	Key() []byte
-	Value() *data.LogRecordPos
+	Value() *data.LogPos
 	Close()
 }

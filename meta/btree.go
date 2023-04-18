@@ -21,7 +21,7 @@ func NewBTree() *BTree {
 	}
 }
 
-func (bt *BTree) Put(key []byte, pos *data.LogRecordPos) bool {
+func (bt *BTree) Put(key []byte, pos *data.LogPos) bool {
 	item := &Item{
 		Key: key,
 		Pos: pos,
@@ -33,7 +33,7 @@ func (bt *BTree) Put(key []byte, pos *data.LogRecordPos) bool {
 	return true
 }
 
-func (bt *BTree) Get(key []byte) *data.LogRecordPos {
+func (bt *BTree) Get(key []byte) *data.LogPos {
 	item := &Item{
 		Key: key,
 	}
@@ -132,7 +132,7 @@ func (bi *btreeIterator) Key() []byte {
 	return bi.values[bi.currentIndex].Key
 }
 
-func (bi *btreeIterator) Value() *data.LogRecordPos {
+func (bi *btreeIterator) Value() *data.LogPos {
 	return bi.values[bi.currentIndex].Pos
 }
 

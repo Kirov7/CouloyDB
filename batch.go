@@ -7,7 +7,7 @@ import (
 )
 
 var NO_TX_ID uint64 = 0
-var TX_FIN_KEY = []byte("")
+var TX_FIN_KEY = []byte{0x04}
 
 // WriteBatch Atomic operation writeBatch
 type WriteBatch struct {
@@ -46,7 +46,7 @@ func (wb *WriteBatch) Del(key []byte) error {
 	wb.mu.Lock()
 	defer wb.mu.Unlock()
 
-	recordPos := wb.db.index.Get(key)
+	recordPos := wb.db.memTable.Get(key)
 	if recordPos == nil {
 		if wb.pendingWrite[string(key)] != nil {
 			delete(wb.pendingWrite, string(key))
@@ -72,7 +72,7 @@ func (wb *WriteBatch) Commit() error {
 	// get the latest txId
 	txId := wb.db.GetTxId()
 
-	positions := make(map[string]*data.LogRecordPos)
+	positions := make(map[string]*data.LogPos)
 
 	// do appendLogRecord and append it in temp slice
 	for _, record := range wb.pendingWrite {
@@ -87,7 +87,7 @@ func (wb *WriteBatch) Commit() error {
 		positions[string(record.Key)] = recordPos
 	}
 
-	//wb.db.index.Put(record.Key, recordPos)
+	//wb.db.memTable.Put(record.Key, recordPos)
 	// write fin mark
 	finishRecord := &data.LogRecord{
 		Key:  encodeKeyWithTxId(TX_FIN_KEY, txId),
@@ -103,14 +103,14 @@ func (wb *WriteBatch) Commit() error {
 		}
 	}
 
-	// update mem index
+	// update mem memTable
 	for _, record := range wb.pendingWrite {
 		pos := positions[string(record.Key)]
 		if record.Type == data.LogRecordNormal {
-			wb.db.index.Put(record.Key, pos)
+			wb.db.memTable.Put(record.Key, pos)
 		}
 		if record.Type == data.LogRecordDeleted {
-			wb.db.index.Del(record.Key)
+			wb.db.memTable.Del(record.Key)
 		}
 	}
 

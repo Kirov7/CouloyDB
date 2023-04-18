@@ -7,6 +7,7 @@ import (
 	"github.com/Kirov7/CouloyDB/meta"
 	"io"
 	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -18,9 +19,10 @@ type DB struct {
 	options      Options
 	activityFile *data.DataFile
 	oldFile      map[uint32]*data.DataFile
-	index        meta.MemIndex
+	memTable     meta.MemTable
 	mu           *sync.RWMutex
 	txId         uint64
+	isMerging    bool
 }
 
 func NewCouloyDB(opt Options) (*DB, error) {
@@ -38,13 +40,18 @@ func NewCouloyDB(opt Options) (*DB, error) {
 
 	// Init DB
 	db := &DB{
-		options: opt,
-		oldFile: make(map[uint32]*data.DataFile),
-		index:   meta.NewIndexer(opt.IndexerType),
-		mu:      new(sync.RWMutex),
+		options:  opt,
+		oldFile:  make(map[uint32]*data.DataFile),
+		memTable: meta.NewMemTable(opt.IndexerType),
+		mu:       new(sync.RWMutex),
 	}
 
-	// Load DataFile and index
+	// load merge file dir
+	if err := db.loadMergeFiles(); err != nil {
+		return nil, err
+	}
+
+	// Load DataFile and memTable
 	if err := db.loadDataFile(); err != nil {
 		return nil, err
 	}
@@ -56,6 +63,9 @@ func (db *DB) Put(key, value []byte) error {
 	if len(key) == 0 {
 		return ErrKeyIsEmpty
 	}
+	if len(key) == 1 && (key[0] < 32 || key[0] == 127) {
+		return ErrKeyIsControlChar
+	}
 	logRecord := &data.LogRecord{
 		Key:   encodeKeyWithTxId(key, NO_TX_ID),
 		Value: value,
@@ -65,7 +75,7 @@ func (db *DB) Put(key, value []byte) error {
 	if err != nil {
 		return err
 	}
-	if ok := db.index.Put(key, pos); !ok {
+	if ok := db.memTable.Put(key, pos); !ok {
 		return ErrUpdateIndexFailed
 	}
 	return nil
@@ -77,7 +87,7 @@ func (db *DB) Get(key []byte) ([]byte, error) {
 	if len(key) == 0 {
 		return nil, ErrKeyIsEmpty
 	}
-	pos := db.index.Get(key)
+	pos := db.memTable.Get(key)
 	if pos == nil {
 		return nil, ErrKeyNotFound
 	}
@@ -89,8 +99,8 @@ func (db *DB) Del(key []byte) error {
 	if len(key) == 0 {
 		return ErrKeyIsEmpty
 	}
-	// Check if exist in memory index
-	if pos := db.index.Get(key); pos == nil {
+	// Check if exist in memory memTable
+	if pos := db.memTable.Get(key); pos == nil {
 		return nil
 	}
 
@@ -105,8 +115,8 @@ func (db *DB) Del(key []byte) error {
 		return err
 	}
 
-	// Delete key in memory index
-	if ok := db.index.Del(key); !ok {
+	// Delete key in memory memTable
+	if ok := db.memTable.Del(key); !ok {
 		return ErrUpdateIndexFailed
 	}
 	return nil
@@ -114,8 +124,8 @@ func (db *DB) Del(key []byte) error {
 
 // ListKeys get all the key and return
 func (db *DB) ListKeys() [][]byte {
-	iterator := db.index.Iterator(false)
-	keys := make([][]byte, db.index.Count())
+	iterator := db.memTable.Iterator(false)
+	keys := make([][]byte, db.memTable.Count())
 	var idx int
 	for iterator.Rewind(); iterator.Valid(); iterator.Next() {
 		keys[idx] = iterator.Key()
@@ -129,7 +139,7 @@ func (db *DB) Fold(fn func(key []byte, value []byte) bool) error {
 	db.mu.RLock()
 	defer db.mu.RUnlock()
 
-	iterator := db.index.Iterator(false)
+	iterator := db.memTable.Iterator(false)
 	for iterator.Rewind(); iterator.Valid(); iterator.Next() {
 		value, err := db.getValueByPos(iterator.Value())
 		if err != nil {
@@ -170,13 +180,13 @@ func (db *DB) Sync() error {
 	return db.activityFile.Sync()
 }
 
-func (db *DB) appendLogRecordWithLock(log *data.LogRecord) (*data.LogRecordPos, error) {
+func (db *DB) appendLogRecordWithLock(log *data.LogRecord) (*data.LogPos, error) {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 	return db.appendLogRecord(log)
 }
 
-func (db *DB) appendLogRecord(log *data.LogRecord) (*data.LogRecordPos, error) {
+func (db *DB) appendLogRecord(log *data.LogRecord) (*data.LogPos, error) {
 
 	if db.activityFile == nil {
 		if err := db.setActivityFile(); err != nil {
@@ -203,7 +213,7 @@ func (db *DB) appendLogRecord(log *data.LogRecord) (*data.LogRecordPos, error) {
 			return nil, err
 		}
 	}
-	pos := &data.LogRecordPos{
+	pos := &data.LogPos{
 		Fid:    db.activityFile.FileId,
 		Offset: writeOff,
 	}
@@ -270,6 +280,12 @@ func (db *DB) loadDataFile() error {
 		}
 	}
 
+	// load index from hint file first
+	if err := db.loadIndexFromHintFile(); err != nil {
+		return err
+	}
+
+	// loadIndex
 	if err := db.loadIndex(fileIds); err != nil {
 		return err
 	}
@@ -281,15 +297,32 @@ func (db *DB) loadIndex(fids []int) error {
 		return nil
 	}
 
-	updateIndex := func(key []byte, typ data.LogRecordType, pos *data.LogRecordPos) {
+	// get the non merge file
+	hasMerge, nonMergeFileId := false, 0
+	mergeFinFileName := filepath.Join(db.options.DirPath, data.MergeFinishedFileName)
+	if _, err := os.Stat(mergeFinFileName); err == nil {
+		fid, err := db.getNonMergeFileId(db.options.DirPath)
+		if err != nil {
+			return err
+		}
+		hasMerge = true
+		nonMergeFileId = int(fid)
+	}
+
+	// only read non merge file
+	if hasMerge {
+		deleteLessThan(fids, nonMergeFileId)
+	}
+
+	updateIndex := func(key []byte, typ data.LogRecordType, pos *data.LogPos) {
 		var ok bool
 		if typ == data.LogRecordDeleted {
-			ok = db.index.Del(key)
+			ok = db.memTable.Del(key)
 		} else {
-			ok = db.index.Put(key, pos)
+			ok = db.memTable.Put(key, pos)
 		}
 		if !ok {
-			panic("update index failed at update")
+			panic("update memTable failed at update")
 			//return ErrUpdateIndexFailed
 		}
 	}
@@ -319,7 +352,7 @@ func (db *DB) loadIndex(fids []int) error {
 			}
 
 			// Building in-memory indexes
-			logRecordPos := &data.LogRecordPos{Fid: fileId, Offset: offset}
+			logRecordPos := &data.LogPos{Fid: fileId, Offset: offset}
 
 			realKey, txId := parseLogRecordKey(logRecord.Key)
 			if txId == NO_TX_ID {
@@ -360,7 +393,7 @@ func (db *DB) loadIndex(fids []int) error {
 	return nil
 }
 
-func (db *DB) getValueByPos(pos *data.LogRecordPos) ([]byte, error) {
+func (db *DB) getValueByPos(pos *data.LogPos) ([]byte, error) {
 	var dataFile *data.DataFile
 	if db.activityFile.FileId == pos.Fid {
 		dataFile = db.activityFile
@@ -390,4 +423,13 @@ func parseLogRecordKey(key []byte) ([]byte, uint64) {
 
 func (db *DB) GetTxId() uint64 {
 	return atomic.AddUint64(&db.txId, 1)
+}
+
+func deleteLessThan[T comparable](s []T, val T) []T {
+	for i, v := range s {
+		if v == val {
+			return s[i:]
+		}
+	}
+	return s
 }

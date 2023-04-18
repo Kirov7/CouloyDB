@@ -31,8 +31,8 @@ type LogRecord struct {
 	Type  LogRecordType
 }
 
-// LogRecordPos The location of the data on the disk
-type LogRecordPos struct {
+// LogPos The location of the data on the disk
+type LogPos struct {
 	Fid    uint32
 	Offset int64
 }
@@ -57,7 +57,7 @@ func EncodeLogRecord(log *LogRecord) ([]byte, int64) {
 	// copy the value to bytes
 	copy(encBytes[index+len(log.Key):], log.Value)
 
-	// check cre
+	// check crc
 	crc := crc32.ChecksumIEEE(encBytes[4:])
 	binary.LittleEndian.PutUint32(encBytes[:4], crc)
 
@@ -89,6 +89,26 @@ func DecodeLogRecordHeader(buf []byte) (*LogRecordHeader, int64) {
 	return header, int64(index)
 }
 
+// EncodeLogRecordPos encode the pos info
+func EncodeLogRecordPos(pos *LogPos) []byte {
+	buf := make([]byte, binary.MaxVarintLen32+binary.MaxVarintLen64)
+	var index = 0
+	index += binary.PutVarint(buf[index:], int64(pos.Fid))
+	index += binary.PutVarint(buf[index:], pos.Offset)
+	return buf[:index]
+}
+
+func DecodeLogRecordPos(buf []byte) *LogPos {
+	var index = 0
+	fileId, n := binary.Varint(buf[index:])
+	index += n
+	offset, _ := binary.Varint(buf[index:])
+	return &LogPos{
+		Fid:    uint32(fileId),
+		Offset: offset,
+	}
+}
+
 func GetLogRecordCRC(lr *LogRecord, header []byte) uint32 {
 	if lr == nil {
 		return 0
@@ -104,5 +124,5 @@ func GetLogRecordCRC(lr *LogRecord, header []byte) uint32 {
 // TxRecord Transaction data temporarily stored in memory
 type TxRecord struct {
 	Record *LogRecord
-	Pos    *LogRecordPos
+	Pos    *LogPos
 }
