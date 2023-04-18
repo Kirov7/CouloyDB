@@ -9,6 +9,7 @@ go get github.com/Kirov7/CouloyDB
 ```
 <br>
 use CouloyDB in your project
+
 ```go
 import(
 	couloy "github.com/Kirov7/CouloyDB"
@@ -28,7 +29,7 @@ func main() {
 		log.Fatal(err)
 	}
 	
-	// Be careful, you can't use non-displayable characters in ASCII code as your key directly,
+	// Be careful, you can't use non-displayable characters in ASCII code as your key directly(0x00 ~ 0x1F and 0x7F),
 	// because those characters will be used in CouloyDB as necessary operations in the preset key tagging system.
 	key := []byte("first key")
 	value := []byte("first value")
