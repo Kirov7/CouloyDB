@@ -42,7 +42,7 @@ func NewCouloyDB(opt Options) (*DB, error) {
 	db := &DB{
 		options:  opt,
 		oldFile:  make(map[uint32]*data.DataFile),
-		memTable: meta.NewMemTable(opt.IndexerType),
+		memTable: meta.NewMemTable(opt.IndexType),
 		mu:       new(sync.RWMutex),
 	}
 
