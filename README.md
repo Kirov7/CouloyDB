@@ -1,10 +1,51 @@
 # CouloyDB
 ## CouloyDB is a fast KV store engine based on bitcask model
-<br>
 CouloyDB's goal is to compromise between performance and storage costs, as some scenarios redis alternative products.
 
+## Fast start
+import the library
+```sh
+go get github.com/Kirov7/CouloyDB
+```
+use CouloyDB in your project
+```go
+import(
+  couloy "github.com/Kirov7/CouloyDB"
+  "github.com/Kirov7/CouloyDB/meta"
+  "log"
+)
+
+func main(){
+  opt := couloy.Options{
+		DirPath:      "/tmp/couloy",
+		DataFileSize: 4096,
+		IndexerType:  meta.BTree,
+		SyncWrites:   true,
+	}
+  db, err := couloy.NewCouloyDB(opt)
+  if err != nil{
+    log.Fatal(err)
+  }
+  
+  key := []byte("first key")
+  value := []byte("first value")
+  if err := db.Put(key, value); err != nil{
+    log.Fatal(err)
+  }
+  
+  v, err := db.Get(v)
+  if err := nil{
+    log.Fatal(err)
+  }
+  
+  v, err := db.Del(v)
+  if err := nil{
+    log.Fatal(err)
+  }
+}
+```
 ## What will I do next ?
-<br>
+
 - [x] Implement batch write with transaction semantics.
 - [ ] Optimize hintfile storage structure to support the memtable build faster (may use gob).
 - [ ] Increased use of flatbuffers build options to support faster reading speed.
@@ -15,7 +56,8 @@ CouloyDB's goal is to compromise between performance and storage costs, as some 
 - [ ] Extend easy to use distributed solution (may support both gossip and raft protocols for different usage scenarios)
 
 <br>
-> why called Couloy?
+
+> why called Couloy ?<br>
 > Couloy is a game character whose job is a fire assassin with high mobility and practical value<br>
 > Thanks to this character, I passed many levels, and thanks to this game, as a reason to get up early every day during my most confused period<br>
 > You can find the other character in my other project https://github.com/Kirov7/LabrysCache
