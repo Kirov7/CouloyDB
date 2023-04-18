@@ -7,6 +7,7 @@ import the library
 ```sh
 go get github.com/Kirov7/CouloyDB
 ```
+<br>
 use CouloyDB in your project
 ```go
 import(
@@ -14,6 +15,7 @@ import(
 	"github.com/Kirov7/CouloyDB/meta"
 	"log"
 )
+
 func main() {
 	opt := couloy.Options{
 		DirPath:      "/tmp/couloy",
@@ -25,24 +27,30 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-
+	
+	// Be careful, you can't use non-displayable characters in ASCII code as your key directly,
+	// because those characters will be used in CouloyDB as necessary operations in the preset key tagging system.
 	key := []byte("first key")
 	value := []byte("first value")
-	if err := db.Put(key, value); err != nil {
+	
+	err = db.Put(key, value)
+	if err != nil {
 		log.Fatal(err)
 	}
 
 	v, err := db.Get(v)
-	if err := nil {
+	if err != nil {
 		log.Fatal(err)
 	}
 
-	v, err := db.Del(v)
-	if err := nil {
+	err = db.Del(v)
+	if err != nil {
 		log.Fatal(err)
 	}
 }
 ```
+<br>
+
 ## What will I do next ?
 
 - [x] Implement batch write with transaction semantics.
