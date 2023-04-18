@@ -16,6 +16,7 @@ var (
 const DataFileNameSuffix = ".kly"
 const HintFileName = "hint-index"
 const MergeFinishedFileName = "merge-finished"
+const TxIDFileName = "merge-finished"
 
 type DataFile struct {
 	FileId    uint32
@@ -38,6 +39,12 @@ func OpenHintFile(dirPath string) (*DataFile, error) {
 // OpenMergeFinishedFile Open new datafile
 func OpenMergeFinishedFile(dirPath string) (*DataFile, error) {
 	fileName := filepath.Join(dirPath, MergeFinishedFileName)
+	return newDataFile(fileName, 0)
+}
+
+// OpenTxIDFile Open new datafile
+func OpenTxIDFile(dirPath string) (*DataFile, error) {
+	fileName := filepath.Join(dirPath, TxIDFileName)
 	return newDataFile(fileName, 0)
 }
 

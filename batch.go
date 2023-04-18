@@ -6,9 +6,6 @@ import (
 	"sync"
 )
 
-var NO_TX_ID uint64 = 0
-var TX_FIN_KEY = []byte{0x04}
-
 // WriteBatch Atomic operation writeBatch
 type WriteBatch struct {
 	options      WriteBatchOptions
@@ -90,7 +87,7 @@ func (wb *WriteBatch) Commit() error {
 	//wb.db.memTable.Put(record.Key, recordPos)
 	// write fin mark
 	finishRecord := &data.LogRecord{
-		Key:  encodeKeyWithTxId(TX_FIN_KEY, txId),
+		Key:  encodeKeyWithTxId(TX_COMMENT_KEY, txId),
 		Type: data.LogRecordTxnFin,
 	}
 	if _, err := wb.db.appendLogRecord(finishRecord); err != nil {

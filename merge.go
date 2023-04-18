@@ -10,12 +10,6 @@ import (
 	"strconv"
 )
 
-const (
-	mergeDirName = "merge"
-)
-
-var mergeFinishedKey = []byte{0x07}
-
 // Merge Clear invalid data and generate the hint file
 func (db *DB) Merge() error {
 	if db.activityFile == nil {
@@ -132,7 +126,7 @@ func (db *DB) Merge() error {
 		return err
 	}
 	mergeFinRecord := &data.LogRecord{
-		Key:   mergeFinishedKey,
+		Key:   MERGE_FIN_Key,
 		Value: []byte(strconv.Itoa(int(nowMergeFile))),
 	}
 	encRecord, _ := data.EncodeLogRecord(mergeFinRecord)
