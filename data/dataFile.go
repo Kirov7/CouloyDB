@@ -13,7 +13,7 @@ var (
 	ErrInvalidCRC = errors.New("invalid crc value, logRecord maybe corrupted")
 )
 
-const DataFileNameSuffix = ".kly"
+const DataFileNameSuffix = ".cly"
 const HintFileName = "hint-index"
 const MergeFinishedFileName = "merge-finished"
 const TxIDFileName = "merge-finished"
