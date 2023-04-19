@@ -172,6 +172,9 @@ func (db *DB) loadMergeFiles() error {
 		if ent.Name() == data.MergeFinishedFileName {
 			MergeFin = true
 		}
+		if ent.Name() == data.TxIDFileName {
+			continue
+		}
 		mergeFileNames = append(mergeFileNames, ent.Name())
 	}
 

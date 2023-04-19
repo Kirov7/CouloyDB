@@ -87,7 +87,7 @@ func (wb *WriteBatch) Commit() error {
 	//wb.db.memTable.Put(record.Key, recordPos)
 	// write fin mark
 	finishRecord := &data.LogRecord{
-		Key:  encodeKeyWithTxId(TX_COMMENT_KEY, txId),
+		Key:  encodeKeyWithTxId(TX_COMMIT_KEY, txId),
 		Type: data.LogRecordTxnFin,
 	}
 	if _, err := wb.db.appendLogRecord(finishRecord); err != nil {

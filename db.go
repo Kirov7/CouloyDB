@@ -56,6 +56,10 @@ func NewCouloyDB(opt Options) (*DB, error) {
 		return nil, err
 	}
 
+	// load txId from txFile
+	if err := db.loadTxFile(); err != nil {
+		return nil, err
+	}
 	return db, nil
 }
 
@@ -158,6 +162,23 @@ func (db *DB) Close() error {
 	}
 	db.mu.Lock()
 	defer db.mu.Unlock()
+
+	// store current txID
+	txFile, err := data.OpenTxIDFile(db.options.DirPath)
+	if err != nil {
+		return err
+	}
+	record := &data.LogRecord{
+		Key:   TX_PERSIST_KEY,
+		Value: []byte(strconv.FormatUint(db.txId, 10)),
+	}
+	encodeLogRecord, _ := data.EncodeLogRecord(record)
+	if err := txFile.Write(encodeLogRecord); err != nil {
+		return err
+	}
+	if err := txFile.Sync(); err != nil {
+		return err
+	}
 
 	if err := db.activityFile.Close(); err != nil {
 		return err
@@ -393,6 +414,24 @@ func (db *DB) loadIndex(fids []int) error {
 	return nil
 }
 
+func (db DB) loadTxFile() error {
+	fileName := filepath.Join(db.options.DirPath, data.TxIDFileName)
+	if _, err := os.Stat(fileName); os.IsNotExist(err) {
+		return nil
+	}
+	txIDFile, err := data.OpenTxIDFile(db.options.DirPath)
+	if err != nil {
+		return err
+	}
+	record, _, err := txIDFile.ReadLogRecord(0)
+	txID, err := strconv.ParseUint(string(record.Value), 10, 64)
+	if err != nil {
+		return err
+	}
+	db.txId = txID
+
+	return os.Remove(fileName)
+}
 func (db *DB) getValueByPos(pos *data.LogPos) ([]byte, error) {
 	var dataFile *data.DataFile
 	if db.activityFile.FileId == pos.Fid {
