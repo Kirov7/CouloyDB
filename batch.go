@@ -3,6 +3,7 @@ package CouloyDB
 import (
 	"encoding/binary"
 	"github.com/Kirov7/CouloyDB/data"
+	"github.com/Kirov7/CouloyDB/public"
 	"sync"
 )
 
@@ -25,7 +26,7 @@ func (db *DB) NewWriteBatch(opts WriteBatchOptions) *WriteBatch {
 
 func (wb *WriteBatch) Put(key []byte, value []byte) error {
 	if len(key) == 0 {
-		return ErrKeyIsEmpty
+		return public.ErrKeyIsEmpty
 	}
 	wb.mu.Lock()
 	defer wb.mu.Unlock()
@@ -38,7 +39,7 @@ func (wb *WriteBatch) Put(key []byte, value []byte) error {
 
 func (wb *WriteBatch) Del(key []byte) error {
 	if len(key) == 0 {
-		return ErrKeyIsEmpty
+		return public.ErrKeyIsEmpty
 	}
 	wb.mu.Lock()
 	defer wb.mu.Unlock()
@@ -87,7 +88,7 @@ func (wb *WriteBatch) Commit() error {
 	//wb.db.memTable.Put(record.Key, recordPos)
 	// write fin mark
 	finishRecord := &data.LogRecord{
-		Key:  encodeKeyWithTxId(TX_COMMIT_KEY, txId),
+		Key:  encodeKeyWithTxId(public.TX_COMMIT_KEY, txId),
 		Type: data.LogRecordTxnFin,
 	}
 	if _, err := wb.db.appendLogRecord(finishRecord); err != nil {

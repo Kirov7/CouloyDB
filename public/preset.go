@@ -1,8 +1,12 @@
-package CouloyDB
+package public
 
 const (
-	mergeDirName = "merge"
-	fileLockName = "flock"
+	MergeDirName          = "merge"
+	FileLockName          = "flock"
+	DataFileNameSuffix    = ".cly"
+	HintFileName          = "hint-index"
+	MergeFinishedFileName = "merge-finished"
+	TxIDFileName          = "merge-finished"
 )
 
 var (

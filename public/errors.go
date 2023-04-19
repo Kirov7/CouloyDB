@@ -1,4 +1,4 @@
-package CouloyDB
+package public
 
 import "errors"
 
@@ -9,4 +9,5 @@ var (
 	ErrKeyNotFound       = errors.New("the key not found")
 	ErrInMerging         = errors.New("process is in merging")
 	ErrDirOccupied       = errors.New("db directory is occupied")
+	ErrInvalidCRC        = errors.New("invalid crc value, logRecord maybe corrupted")
 )

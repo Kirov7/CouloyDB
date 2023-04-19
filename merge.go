@@ -2,6 +2,7 @@ package CouloyDB
 
 import (
 	"github.com/Kirov7/CouloyDB/data"
+	"github.com/Kirov7/CouloyDB/public"
 	"io"
 	"os"
 	"path"
@@ -20,7 +21,7 @@ func (db *DB) Merge() error {
 
 	if db.isMerging {
 		db.mu.Unlock()
-		return ErrInMerging
+		return public.ErrInMerging
 	}
 
 	db.isMerging = true
@@ -97,7 +98,7 @@ func (db *DB) Merge() error {
 			// compare with the memTable, if the already exist in memTable then rewrite it
 			if logRecordPos != nil && logRecordPos.Fid == oldFile.FileId && logRecordPos.Offset == offset {
 				// clean the txId mark
-				logRecord.Key = encodeKeyWithTxId(realKey, NO_TX_ID)
+				logRecord.Key = encodeKeyWithTxId(realKey, public.NO_TX_ID)
 				pos, err := mergeDb.appendLogRecord(logRecord)
 				if err != nil {
 					return err
@@ -126,7 +127,7 @@ func (db *DB) Merge() error {
 		return err
 	}
 	mergeFinRecord := &data.LogRecord{
-		Key:   MERGE_FIN_Key,
+		Key:   public.MERGE_FIN_Key,
 		Value: []byte(strconv.Itoa(int(nowMergeFile))),
 	}
 	encRecord, _ := data.EncodeLogRecord(mergeFinRecord)
@@ -146,7 +147,7 @@ func (db *DB) getMergePath() string {
 	dir := path.Dir(path.Clean(db.options.DirPath))
 	// get the current dir name
 	base := path.Base(db.options.DirPath)
-	return filepath.Join(dir, base+mergeDirName)
+	return filepath.Join(dir, base+public.MergeDirName)
 }
 
 func (db *DB) loadMergeFiles() error {
@@ -169,10 +170,10 @@ func (db *DB) loadMergeFiles() error {
 	var mergeFileNames []string
 
 	for _, ent := range dirEnts {
-		if ent.Name() == data.MergeFinishedFileName {
+		if ent.Name() == public.MergeFinishedFileName {
 			MergeFin = true
 		}
-		if ent.Name() == data.TxIDFileName {
+		if ent.Name() == public.TxIDFileName {
 			continue
 		}
 		mergeFileNames = append(mergeFileNames, ent.Name())
@@ -227,7 +228,7 @@ func (db *DB) getNonMergeFileId(dirPath string) (uint32, error) {
 
 func (db *DB) loadIndexFromHintFile() error {
 	// check hint file is exist
-	hintFileName := filepath.Join(db.options.DirPath, data.HintFileName)
+	hintFileName := filepath.Join(db.options.DirPath, public.HintFileName)
 	if _, err := os.Stat(hintFileName); os.IsNotExist(err) {
 		return nil
 	}

@@ -1,22 +1,13 @@
 package data
 
 import (
-	"errors"
 	"fmt"
 	"github.com/Kirov7/CouloyDB/driver"
+	"github.com/Kirov7/CouloyDB/public"
 	"hash/crc32"
 	"io"
 	"path/filepath"
 )
-
-var (
-	ErrInvalidCRC = errors.New("invalid crc value, logRecord maybe corrupted")
-)
-
-const DataFileNameSuffix = ".cly"
-const HintFileName = "hint-index"
-const MergeFinishedFileName = "merge-finished"
-const TxIDFileName = "merge-finished"
 
 type DataFile struct {
 	FileId   uint32
@@ -27,30 +18,30 @@ type DataFile struct {
 
 // OpenDataFile Open new datafile
 func OpenDataFile(dirPath string, fileId uint32) (*DataFile, error) {
-	fileName := filepath.Join(dirPath, fmt.Sprintf("%09d", fileId)+DataFileNameSuffix)
+	fileName := filepath.Join(dirPath, fmt.Sprintf("%09d", fileId)+public.DataFileNameSuffix)
 	return newDataFile(fileName, fileId)
 }
 
 // OpenHintFile Open new datafile
 func OpenHintFile(dirPath string) (*DataFile, error) {
-	fileName := filepath.Join(dirPath, HintFileName)
+	fileName := filepath.Join(dirPath, public.HintFileName)
 	return newDataFile(fileName, 0)
 }
 
 // OpenMergeFinishedFile Open new datafile
 func OpenMergeFinishedFile(dirPath string) (*DataFile, error) {
-	fileName := filepath.Join(dirPath, MergeFinishedFileName)
+	fileName := filepath.Join(dirPath, public.MergeFinishedFileName)
 	return newDataFile(fileName, 0)
 }
 
 // OpenTxIDFile Open new datafile
 func OpenTxIDFile(dirPath string) (*DataFile, error) {
-	fileName := filepath.Join(dirPath, TxIDFileName)
+	fileName := filepath.Join(dirPath, public.TxIDFileName)
 	return newDataFile(fileName, 0)
 }
 
 func GetDataFileName(dirPath string, fileId uint32) string {
-	return filepath.Join(dirPath, fmt.Sprintf("%09d", fileId)+DataFileNameSuffix)
+	return filepath.Join(dirPath, fmt.Sprintf("%09d", fileId)+public.DataFileNameSuffix)
 }
 
 func newDataFile(fileName string, fileId uint32) (*DataFile, error) {
@@ -114,7 +105,7 @@ func (df *DataFile) ReadLogRecord(offset int64) (*LogRecord, int64, error) {
 	// check crc
 	crc := GetLogRecordCRC(logRecord, headerBuf[crc32.Size:headerSize])
 	if crc != header.crc {
-		return nil, 0, ErrInvalidCRC
+		return nil, 0, public.ErrInvalidCRC
 	}
 	return logRecord, recordSize, nil
 }

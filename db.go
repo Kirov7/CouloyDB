@@ -5,6 +5,7 @@ import (
 	"errors"
 	"github.com/Kirov7/CouloyDB/data"
 	"github.com/Kirov7/CouloyDB/meta"
+	"github.com/Kirov7/CouloyDB/public"
 	"github.com/gofrs/flock"
 	"io"
 	"os"
@@ -43,11 +44,11 @@ func NewCouloyDB(opt Options) (*DB, error) {
 		}
 	}
 
-	fl := flock.New(filepath.Join(opt.DirPath, fileLockName))
+	fl := flock.New(filepath.Join(opt.DirPath, public.FileLockName))
 	if getLock, err := fl.TryLock(); err != nil {
 		return nil, err
 	} else if !getLock {
-		return nil, ErrDirOccupied
+		return nil, public.ErrDirOccupied
 	}
 
 	// Init DB
@@ -78,13 +79,13 @@ func NewCouloyDB(opt Options) (*DB, error) {
 
 func (db *DB) Put(key, value []byte) error {
 	if len(key) == 0 {
-		return ErrKeyIsEmpty
+		return public.ErrKeyIsEmpty
 	}
 	if len(key) == 1 && (key[0] < 32 || key[0] == 127) {
-		return ErrKeyIsControlChar
+		return public.ErrKeyIsControlChar
 	}
 	logRecord := &data.LogRecord{
-		Key:   encodeKeyWithTxId(key, NO_TX_ID),
+		Key:   encodeKeyWithTxId(key, public.NO_TX_ID),
 		Value: value,
 		Type:  data.LogRecordNormal,
 	}
@@ -93,7 +94,7 @@ func (db *DB) Put(key, value []byte) error {
 		return err
 	}
 	if ok := db.memTable.Put(key, pos); !ok {
-		return ErrUpdateIndexFailed
+		return public.ErrUpdateIndexFailed
 	}
 	return nil
 }
@@ -102,11 +103,11 @@ func (db *DB) Get(key []byte) ([]byte, error) {
 	db.mu.RLock()
 	defer db.mu.RUnlock()
 	if len(key) == 0 {
-		return nil, ErrKeyIsEmpty
+		return nil, public.ErrKeyIsEmpty
 	}
 	pos := db.memTable.Get(key)
 	if pos == nil {
-		return nil, ErrKeyNotFound
+		return nil, public.ErrKeyNotFound
 	}
 
 	return db.getValueByPos(pos)
@@ -114,7 +115,7 @@ func (db *DB) Get(key []byte) ([]byte, error) {
 
 func (db *DB) Del(key []byte) error {
 	if len(key) == 0 {
-		return ErrKeyIsEmpty
+		return public.ErrKeyIsEmpty
 	}
 	// Check if exist in memory memTable
 	if pos := db.memTable.Get(key); pos == nil {
@@ -123,7 +124,7 @@ func (db *DB) Del(key []byte) error {
 
 	// Build deleted tags LogRecord
 	logRecord := &data.LogRecord{
-		Key:  encodeKeyWithTxId(key, NO_TX_ID),
+		Key:  encodeKeyWithTxId(key, public.NO_TX_ID),
 		Type: data.LogRecordDeleted,
 	}
 
@@ -134,7 +135,7 @@ func (db *DB) Del(key []byte) error {
 
 	// Delete key in memory memTable
 	if ok := db.memTable.Del(key); !ok {
-		return ErrUpdateIndexFailed
+		return public.ErrUpdateIndexFailed
 	}
 	return nil
 }
@@ -187,7 +188,7 @@ func (db *DB) Close() error {
 		return err
 	}
 	record := &data.LogRecord{
-		Key:   TX_PERSIST_KEY,
+		Key:   public.TX_PERSIST_KEY,
 		Value: []byte(strconv.FormatUint(db.txId, 10)),
 	}
 	encodeLogRecord, _ := data.EncodeLogRecord(record)
@@ -322,7 +323,7 @@ func (db *DB) loadDataFile() error {
 
 	// Iterate through all the files in the directory and find the ones that end with .cly
 	for _, entry := range dirEntries {
-		if strings.HasSuffix(entry.Name(), data.DataFileNameSuffix) {
+		if strings.HasSuffix(entry.Name(), public.DataFileNameSuffix) {
 			splitNames := strings.Split(entry.Name(), ".")
 			fileId, err := strconv.Atoi(splitNames[0])
 			if err != nil {
@@ -364,7 +365,7 @@ func (db *DB) loadIndex(fids []int) error {
 
 	// get the non merge file
 	hasMerge, nonMergeFileId := false, 0
-	mergeFinFileName := filepath.Join(db.options.DirPath, data.MergeFinishedFileName)
+	mergeFinFileName := filepath.Join(db.options.DirPath, public.MergeFinishedFileName)
 	if _, err := os.Stat(mergeFinFileName); err == nil {
 		fid, err := db.getNonMergeFileId(db.options.DirPath)
 		if err != nil {
@@ -395,7 +396,7 @@ func (db *DB) loadIndex(fids []int) error {
 	// a map to store the Record data in tx temporarily
 	// txId -> recordList
 	txRecords := make(map[uint64][]*data.TxRecord)
-	var curTxId = NO_TX_ID
+	var curTxId = public.NO_TX_ID
 
 	// Iterate through all the file ids and process the records in the file
 	for i, fid := range fids {
@@ -420,7 +421,7 @@ func (db *DB) loadIndex(fids []int) error {
 			logRecordPos := &data.LogPos{Fid: fileId, Offset: offset}
 
 			realKey, txId := parseLogRecordKey(logRecord.Key)
-			if txId == NO_TX_ID {
+			if txId == public.NO_TX_ID {
 				// if not in tx, update memIndex directly
 				updateIndex(realKey, logRecord.Type, logRecordPos)
 			} else {
@@ -459,7 +460,7 @@ func (db *DB) loadIndex(fids []int) error {
 }
 
 func (db DB) loadTxFile() error {
-	fileName := filepath.Join(db.options.DirPath, data.TxIDFileName)
+	fileName := filepath.Join(db.options.DirPath, public.TxIDFileName)
 	if _, err := os.Stat(fileName); os.IsNotExist(err) {
 		return nil
 	}
@@ -484,7 +485,7 @@ func (db *DB) getValueByPos(pos *data.LogPos) ([]byte, error) {
 		dataFile = db.oldFile[pos.Fid]
 	}
 	if dataFile == nil {
-		return nil, ErrKeyNotFound
+		return nil, public.ErrKeyNotFound
 	}
 
 	logRecord, _, err := dataFile.ReadLogRecord(pos.Offset)
@@ -492,7 +493,7 @@ func (db *DB) getValueByPos(pos *data.LogPos) ([]byte, error) {
 		return nil, err
 	}
 	if logRecord.Type == data.LogRecordDeleted {
-		return nil, ErrKeyNotFound
+		return nil, public.ErrKeyNotFound
 	}
 	return logRecord.Value, nil
 }
