@@ -8,4 +8,5 @@ var (
 	ErrUpdateIndexFailed = errors.New("update memTable failed")
 	ErrKeyNotFound       = errors.New("the key not found")
 	ErrInMerging         = errors.New("process is in merging")
+	ErrDirOccupied       = errors.New("db directory is occupied")
 )

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"github.com/Kirov7/CouloyDB/data"
 	"github.com/Kirov7/CouloyDB/meta"
+	"github.com/gofrs/flock"
 	"io"
 	"os"
 	"path/filepath"
@@ -23,6 +24,7 @@ type DB struct {
 	mu           *sync.RWMutex
 	txId         uint64
 	isMerging    bool
+	flock        *flock.Flock
 }
 
 func NewCouloyDB(opt Options) (*DB, error) {
@@ -38,12 +40,20 @@ func NewCouloyDB(opt Options) (*DB, error) {
 		}
 	}
 
+	fl := flock.New(filepath.Join(opt.DirPath, fileLockName))
+	if getLock, err := fl.TryLock(); err != nil {
+		return nil, err
+	} else if !getLock {
+		return nil, ErrDirOccupied
+	}
+
 	// Init DB
 	db := &DB{
 		options:  opt,
 		oldFile:  make(map[uint32]*data.DataFile),
 		memTable: meta.NewMemTable(opt.IndexType),
 		mu:       new(sync.RWMutex),
+		flock:    fl,
 	}
 
 	// load merge file dir
@@ -162,6 +172,11 @@ func (db *DB) Close() error {
 	}
 	db.mu.Lock()
 	defer db.mu.Unlock()
+	defer func() {
+		if err := db.flock.Unlock(); err != nil {
+			panic(err)
+		}
+	}()
 
 	// store current txID
 	txFile, err := data.OpenTxIDFile(db.options.DirPath)

@@ -2,6 +2,7 @@ package CouloyDB
 
 const (
 	mergeDirName = "merge"
+	fileLockName = "flock"
 )
 
 var (
