@@ -19,9 +19,10 @@ const MergeFinishedFileName = "merge-finished"
 const TxIDFileName = "merge-finished"
 
 type DataFile struct {
-	FileId    uint32
-	WriteOff  int64
-	IoManager driver.IOManager
+	FileId   uint32
+	WriteOff int64
+	Writer   driver.IOManager
+	Reader   driver.IOManager
 }
 
 // OpenDataFile Open new datafile
@@ -53,19 +54,24 @@ func GetDataFileName(dirPath string, fileId uint32) string {
 }
 
 func newDataFile(fileName string, fileId uint32) (*DataFile, error) {
-	ioManager, err := driver.NewIOManager(fileName)
+	writer, err := driver.NewIOManager(fileName)
+	if err != nil {
+		return nil, err
+	}
+	reader, err := driver.NewMMap(fileName)
 	if err != nil {
 		return nil, err
 	}
 	return &DataFile{
-		FileId:    fileId,
-		WriteOff:  0,
-		IoManager: ioManager,
+		FileId:   fileId,
+		WriteOff: 0,
+		Writer:   writer,
+		Reader:   reader,
 	}, nil
 }
 
 func (df *DataFile) ReadLogRecord(offset int64) (*LogRecord, int64, error) {
-	fileSize, err := df.IoManager.Size()
+	fileSize, err := df.Writer.Size()
 	if err != nil {
 		return nil, 0, err
 	}
@@ -124,15 +130,15 @@ func (df *DataFile) WriteHintRecord(key []byte, pos *LogPos) error {
 }
 
 func (df *DataFile) Sync() error {
-	return df.IoManager.Sync()
+	return df.Writer.Sync()
 }
 
 func (df *DataFile) Close() error {
-	return df.IoManager.Close()
+	return df.Writer.Close()
 }
 
 func (df *DataFile) Write(buf []byte) error {
-	n, err := df.IoManager.Write(buf)
+	n, err := df.Writer.Write(buf)
 	if err != nil {
 		return err
 	}
@@ -142,6 +148,7 @@ func (df *DataFile) Write(buf []byte) error {
 
 func (df *DataFile) readNBytes(n int64, offset int64) (b []byte, err error) {
 	b = make([]byte, n)
-	_, err = df.IoManager.Read(b, offset)
+
+	_, err = df.Reader.Read(b, offset)
 	return nil, err
 }

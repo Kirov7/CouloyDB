@@ -25,6 +25,9 @@ type DB struct {
 	txId         uint64
 	isMerging    bool
 	flock        *flock.Flock
+	bytesWrite   uint64
+	syncChan     chan struct{}
+	mergeChan    chan struct{}
 }
 
 func NewCouloyDB(opt Options) (*DB, error) {
@@ -216,6 +219,19 @@ func (db *DB) Sync() error {
 	return db.activityFile.Sync()
 }
 
+func (db *DB) syncWorker() {
+	for {
+		select {
+		case <-db.syncChan:
+
+		}
+	}
+}
+
+func (db *DB) mergeWorker() {
+
+}
+
 func (db *DB) appendLogRecordWithLock(log *data.LogRecord) (*data.LogPos, error) {
 	db.mu.Lock()
 	defer db.mu.Unlock()
@@ -244,11 +260,24 @@ func (db *DB) appendLogRecord(log *data.LogRecord) (*data.LogPos, error) {
 	if err := db.activityFile.Write(encRecord); err != nil {
 		return nil, err
 	}
+
+	var needSync bool
 	if db.options.SyncWrites {
+		needSync = true
+	} else if db.options.BytesPerSync > 0 {
+		atomic.AddUint64(&db.bytesWrite, uint64(size))
+		if db.bytesWrite > db.options.BytesPerSync {
+			atomic.StoreUint64(&db.bytesWrite, 0)
+			needSync = true
+		}
+	}
+
+	if needSync {
 		if err := db.activityFile.Sync(); err != nil {
 			return nil, err
 		}
 	}
+
 	pos := &data.LogPos{
 		Fid:    db.activityFile.FileId,
 		Offset: writeOff,

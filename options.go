@@ -6,10 +6,12 @@ import (
 )
 
 type Options struct {
-	DirPath      string
-	DataFileSize int64
-	IndexType    meta.MemTableType
-	SyncWrites   bool
+	DirPath            string
+	DataFileSize       int64
+	IndexType          meta.MemTableType
+	SyncWrites         bool
+	BytesPerSync       uint64
+	MillisecondPerSync uint64
 }
 
 type IteratorOptions struct {
