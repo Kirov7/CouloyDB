@@ -147,6 +147,7 @@ func (db *DB) ListKeys() [][]byte {
 	var idx int
 	for iterator.Rewind(); iterator.Valid(); iterator.Next() {
 		keys[idx] = iterator.Key()
+		idx++
 	}
 	return keys
 }
@@ -171,16 +172,16 @@ func (db *DB) Fold(fn func(key []byte, value []byte) bool) error {
 }
 
 func (db *DB) Close() error {
-	if db.activityFile == nil {
-		return nil
-	}
-	db.mu.Lock()
-	defer db.mu.Unlock()
 	defer func() {
 		if err := db.flock.Unlock(); err != nil {
 			panic(err)
 		}
 	}()
+	if db.activityFile == nil {
+		return nil
+	}
+	db.mu.Lock()
+	defer db.mu.Unlock()
 
 	// store current txID
 	txFile, err := data.OpenTxIDFile(db.options.DirPath)
@@ -288,7 +289,7 @@ func (db *DB) appendLogRecord(log *data.LogRecord) (*data.LogPos, error) {
 
 func (db *DB) setActivityFile() error {
 	var initialFileId uint32 = 0
-	if db.activityFile == nil {
+	if db.activityFile != nil {
 		initialFileId = db.activityFile.FileId + 1
 	}
 	// open the new dataFile

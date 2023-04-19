@@ -29,7 +29,14 @@ func DefaultOptions() Options {
 		DirPath:      os.TempDir(),
 		DataFileSize: 256 * 1024 * 1024, // 256MB
 		IndexType:    meta.Btree,
-		SyncWrites:   false,
+		SyncWrites:   true,
+	}
+}
+
+func DefaultBatchOptions() WriteBatchOptions {
+	return WriteBatchOptions{
+		MaxBatchNum: 2000,
+		SyncWrites:  true,
 	}
 }
 

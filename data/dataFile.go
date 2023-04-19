@@ -140,6 +140,9 @@ func (df *DataFile) Write(buf []byte) error {
 func (df *DataFile) readNBytes(n int64, offset int64) (b []byte, err error) {
 	b = make([]byte, n)
 
-	_, err = df.Reader.Read(b, offset)
-	return nil, err
+	_, err = df.Writer.Read(b, offset)
+	if err != nil {
+		return nil, err
+	}
+	return b, nil
 }
