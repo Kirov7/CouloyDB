@@ -125,7 +125,14 @@ func (df *DataFile) Sync() error {
 }
 
 func (df *DataFile) Close() error {
-	return df.Writer.Close()
+	if err := df.Reader.Close(); err != nil {
+		return err
+	}
+
+	if err := df.Writer.Close(); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (df *DataFile) Write(buf []byte) error {
@@ -140,7 +147,7 @@ func (df *DataFile) Write(buf []byte) error {
 func (df *DataFile) readNBytes(n int64, offset int64) (b []byte, err error) {
 	b = make([]byte, n)
 
-	_, err = df.Writer.Read(b, offset)
+	_, err = df.Reader.Read(b, offset)
 	if err != nil {
 		return nil, err
 	}

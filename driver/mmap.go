@@ -6,7 +6,8 @@ import (
 )
 
 type MMap struct {
-	readAt *mmap.ReaderAt
+	readAt   *mmap.ReaderAt
+	fileName string
 }
 
 func NewMMap(fileName string) (*MMap, error) {
@@ -14,15 +15,20 @@ func NewMMap(fileName string) (*MMap, error) {
 	if err != nil {
 		return nil, err
 	}
-	readAt, err := mmap.Open(fileName)
-	if err != nil {
-		return nil, err
-	}
-	return &MMap{readAt: readAt}, nil
+	//readAt, err := mmap.Open(fileName)
+	//if err != nil {
+	//	return nil, err
+	//}
+	return &MMap{fileName: fileName}, nil
 }
 
 func (m *MMap) Read(bytes []byte, offset int64) (int, error) {
-	return m.readAt.ReadAt(bytes, offset)
+	readAt, err := mmap.Open(m.fileName)
+	defer readAt.Close()
+	if err != nil {
+		return 0, err
+	}
+	return readAt.ReadAt(bytes, offset)
 }
 
 func (m *MMap) Write(bytes []byte) (int, error) {
@@ -34,7 +40,7 @@ func (m *MMap) Sync() error {
 }
 
 func (m *MMap) Close() error {
-	return m.readAt.Close()
+	return nil
 }
 
 func (m *MMap) Size() (int64, error) {
