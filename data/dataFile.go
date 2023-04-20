@@ -1,42 +1,68 @@
 package data
 
 import (
-	"errors"
 	"fmt"
 	"github.com/Kirov7/CouloyDB/driver"
+	"github.com/Kirov7/CouloyDB/public"
 	"hash/crc32"
 	"io"
 	"path/filepath"
 )
 
-var (
-	ErrInvalidCRC = errors.New("invalid crc value, logRecord maybe corrupted")
-)
-
-const DataFileNameSuffix = ".cly"
-
 type DataFile struct {
-	FileId    uint32
-	WriteOff  int64
-	IoManager driver.IOManager
+	FileId   uint32
+	WriteOff int64
+	Writer   driver.IOManager
+	Reader   driver.IOManager
 }
 
 // OpenDataFile Open new datafile
 func OpenDataFile(dirPath string, fileId uint32) (*DataFile, error) {
-	fileName := filepath.Join(dirPath, fmt.Sprintf("%09d", fileId)+DataFileNameSuffix)
-	ioManager, err := driver.NewIOManager(fileName)
+	fileName := filepath.Join(dirPath, fmt.Sprintf("%09d", fileId)+public.DataFileNameSuffix)
+	return newDataFile(fileName, fileId)
+}
+
+// OpenHintFile Open new datafile
+func OpenHintFile(dirPath string) (*DataFile, error) {
+	fileName := filepath.Join(dirPath, public.HintFileName)
+	return newDataFile(fileName, 0)
+}
+
+// OpenMergeFinishedFile Open new datafile
+func OpenMergeFinishedFile(dirPath string) (*DataFile, error) {
+	fileName := filepath.Join(dirPath, public.MergeFinishedFileName)
+	return newDataFile(fileName, 0)
+}
+
+// OpenTxIDFile Open new datafile
+//func OpenTxIDFile(dirPath string) (*DataFile, error) {
+//	fileName := filepath.Join(dirPath, public.TxIDFileName)
+//	return newDataFile(fileName, 0)
+//}
+
+func GetDataFileName(dirPath string, fileId uint32) string {
+	return filepath.Join(dirPath, fmt.Sprintf("%09d", fileId)+public.DataFileNameSuffix)
+}
+
+func newDataFile(fileName string, fileId uint32) (*DataFile, error) {
+	writer, err := driver.NewIOManager(fileName)
+	if err != nil {
+		return nil, err
+	}
+	reader, err := driver.NewMMap(fileName)
 	if err != nil {
 		return nil, err
 	}
 	return &DataFile{
-		FileId:    fileId,
-		WriteOff:  0,
-		IoManager: ioManager,
+		FileId:   fileId,
+		WriteOff: 0,
+		Writer:   writer,
+		Reader:   reader,
 	}, nil
 }
 
 func (df *DataFile) ReadLogRecord(offset int64) (*LogRecord, int64, error) {
-	fileSize, err := df.IoManager.Size()
+	fileSize, err := df.Writer.Size()
 	if err != nil {
 		return nil, 0, err
 	}
@@ -79,21 +105,38 @@ func (df *DataFile) ReadLogRecord(offset int64) (*LogRecord, int64, error) {
 	// check crc
 	crc := GetLogRecordCRC(logRecord, headerBuf[crc32.Size:headerSize])
 	if crc != header.crc {
-		return nil, 0, ErrInvalidCRC
+		return nil, 0, public.ErrInvalidCRC
 	}
 	return logRecord, recordSize, nil
 }
 
+// WriteHintRecord write the index info to the hint file
+func (df *DataFile) WriteHintRecord(key []byte, pos *LogPos) error {
+	record := &LogRecord{
+		Key:   key,
+		Value: EncodeLogRecordPos(pos),
+	}
+	encRecord, _ := EncodeLogRecord(record)
+	return df.Write(encRecord)
+}
+
 func (df *DataFile) Sync() error {
-	return df.IoManager.Sync()
+	return df.Writer.Sync()
 }
 
 func (df *DataFile) Close() error {
-	return df.IoManager.Close()
+	if err := df.Reader.Close(); err != nil {
+		return err
+	}
+
+	if err := df.Writer.Close(); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (df *DataFile) Write(buf []byte) error {
-	n, err := df.IoManager.Write(buf)
+	n, err := df.Writer.Write(buf)
 	if err != nil {
 		return err
 	}
@@ -103,6 +146,10 @@ func (df *DataFile) Write(buf []byte) error {
 
 func (df *DataFile) readNBytes(n int64, offset int64) (b []byte, err error) {
 	b = make([]byte, n)
-	_, err = df.IoManager.Read(b, offset)
-	return nil, err
+
+	_, err = df.Reader.Read(b, offset)
+	if err != nil {
+		return nil, err
+	}
+	return b, nil
 }
