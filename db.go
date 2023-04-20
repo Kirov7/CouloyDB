@@ -15,6 +15,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 )
 
 type DB struct {
@@ -23,7 +24,7 @@ type DB struct {
 	oldFile      map[uint32]*data.DataFile
 	memTable     meta.MemTable
 	mu           *sync.RWMutex
-	txId         uint64
+	txId         int64
 	isMerging    bool
 	flock        *flock.Flock
 	bytesWrite   uint64
@@ -57,6 +58,7 @@ func NewCouloyDB(opt Options) (*DB, error) {
 		oldFile:  make(map[uint32]*data.DataFile),
 		memTable: meta.NewMemTable(opt.IndexType),
 		mu:       new(sync.RWMutex),
+		txId:     time.Now().UnixNano(),
 		flock:    fl,
 	}
 
@@ -70,10 +72,6 @@ func NewCouloyDB(opt Options) (*DB, error) {
 		return nil, err
 	}
 
-	// load txId from txFile
-	if err := db.loadTxFile(); err != nil {
-		return nil, err
-	}
 	return db, nil
 }
 
@@ -182,23 +180,6 @@ func (db *DB) Close() error {
 	}
 	db.mu.Lock()
 	defer db.mu.Unlock()
-
-	// store current txID
-	txFile, err := data.OpenTxIDFile(db.options.DirPath)
-	if err != nil {
-		return err
-	}
-	record := &data.LogRecord{
-		Key:   public.TX_PERSIST_KEY,
-		Value: []byte(strconv.FormatUint(db.txId, 10)),
-	}
-	encodeLogRecord, _ := data.EncodeLogRecord(record)
-	if err := txFile.Write(encodeLogRecord); err != nil {
-		return err
-	}
-	if err := txFile.Sync(); err != nil {
-		return err
-	}
 
 	if err := db.activityFile.Close(); err != nil {
 		return err
@@ -396,8 +377,7 @@ func (db *DB) loadIndex(fids []int) error {
 
 	// a map to store the Record data in tx temporarily
 	// txId -> recordList
-	txRecords := make(map[uint64][]*data.TxRecord)
-	var curTxId = public.NO_TX_ID
+	txRecords := make(map[int64][]*data.TxRecord)
 
 	// Iterate through all the file ids and process the records in the file
 	for i, fid := range fids {
@@ -441,10 +421,6 @@ func (db *DB) loadIndex(fids []int) error {
 						Pos:    logRecordPos,
 					})
 				}
-				// update txId
-				if txId > curTxId {
-					curTxId = txId
-				}
 			}
 
 			// Increment the offset, starting from the new position
@@ -456,28 +432,28 @@ func (db *DB) loadIndex(fids []int) error {
 			db.activityFile.WriteOff = offset
 		}
 	}
-	db.txId = curTxId
 	return nil
 }
 
-func (db DB) loadTxFile() error {
-	fileName := filepath.Join(db.options.DirPath, public.TxIDFileName)
-	if _, err := os.Stat(fileName); os.IsNotExist(err) {
-		return nil
-	}
-	txIDFile, err := data.OpenTxIDFile(db.options.DirPath)
-	if err != nil {
-		return err
-	}
-	record, _, err := txIDFile.ReadLogRecord(0)
-	txID, err := strconv.ParseUint(string(record.Value), 10, 64)
-	if err != nil {
-		return err
-	}
-	db.txId = txID
+//func (db DB) loadTxFile() error {
+//	fileName := filepath.Join(db.options.DirPath, public.TxIDFileName)
+//	if _, err := os.Stat(fileName); os.IsNotExist(err) {
+//		return nil
+//	}
+//	txIDFile, err := data.OpenTxIDFile(db.options.DirPath)
+//	if err != nil {
+//		return err
+//	}
+//	record, _, err := txIDFile.ReadLogRecord(0)
+//	txID, err := strconv.ParseUint(string(record.Value), 10, 64)
+//	if err != nil {
+//		return err
+//	}
+//	db.txId = txID
+//
+//	return os.Remove(fileName)
+//}
 
-	return os.Remove(fileName)
-}
 func (db *DB) getValueByPos(pos *data.LogPos) ([]byte, error) {
 	var dataFile *data.DataFile
 	if db.activityFile.FileId == pos.Fid {
@@ -500,14 +476,14 @@ func (db *DB) getValueByPos(pos *data.LogPos) ([]byte, error) {
 }
 
 // prase LogRecord's Key and get the real key with txId
-func parseLogRecordKey(key []byte) ([]byte, uint64) {
-	txId, n := binary.Uvarint(key)
+func parseLogRecordKey(key []byte) ([]byte, int64) {
+	txId, n := binary.Varint(key)
 	realKey := key[n:]
 	return realKey, txId
 }
 
-func (db *DB) GetTxId() uint64 {
-	return atomic.AddUint64(&db.txId, 1)
+func (db *DB) GetTxId() int64 {
+	return atomic.AddInt64(&db.txId, 1)
 }
 
 func deleteLessThan[T comparable](s []T, val T) []T {

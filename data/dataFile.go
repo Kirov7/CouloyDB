@@ -35,10 +35,10 @@ func OpenMergeFinishedFile(dirPath string) (*DataFile, error) {
 }
 
 // OpenTxIDFile Open new datafile
-func OpenTxIDFile(dirPath string) (*DataFile, error) {
-	fileName := filepath.Join(dirPath, public.TxIDFileName)
-	return newDataFile(fileName, 0)
-}
+//func OpenTxIDFile(dirPath string) (*DataFile, error) {
+//	fileName := filepath.Join(dirPath, public.TxIDFileName)
+//	return newDataFile(fileName, 0)
+//}
 
 func GetDataFileName(dirPath string, fileId uint32) string {
 	return filepath.Join(dirPath, fmt.Sprintf("%09d", fileId)+public.DataFileNameSuffix)

@@ -117,9 +117,9 @@ func (wb *WriteBatch) Commit() error {
 	return nil
 }
 
-func encodeKeyWithTxId(key []byte, txId uint64) []byte {
+func encodeKeyWithTxId(key []byte, txId int64) []byte {
 	txBin := make([]byte, binary.MaxVarintLen64)
-	lenTxBin := binary.PutUvarint(txBin[:], txId)
+	lenTxBin := binary.PutVarint(txBin[:], txId)
 	encKey := make([]byte, lenTxBin+len(key))
 	copy(encKey[:lenTxBin], txBin[:lenTxBin])
 	copy(encKey[lenTxBin:], key)
