@@ -65,6 +65,15 @@ func (bt *BTree) Count() int {
 	return bt.tree.Len()
 }
 
+type Item struct {
+	Key []byte
+	Pos *data.LogPos
+}
+
+func (i *Item) Less(bi btree.Item) bool {
+	return bytes.Compare(i.Key, bi.(*Item).Key) == -1
+}
+
 func (bt *BTree) Iterator(reverse bool) Iterator {
 	if bt.tree == nil {
 		return nil

@@ -1,9 +1,7 @@
 package meta
 
 import (
-	"bytes"
 	"github.com/Kirov7/CouloyDB/data"
-	"github.com/google/btree"
 )
 
 type MemTableType = int8
@@ -39,15 +37,6 @@ func NewMemTable(typ MemTableType) MemTable {
 	default:
 		return NewBTree()
 	}
-}
-
-type Item struct {
-	Key []byte
-	Pos *data.LogPos
-}
-
-func (i *Item) Less(bi btree.Item) bool {
-	return bytes.Compare(i.Key, bi.(*Item).Key) == -1
 }
 
 // Iterator Generic index iterator interface
