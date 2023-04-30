@@ -57,7 +57,7 @@ func main() {
 - [x] Implement batch write with transaction semantics.
 - [ ] Optimize hintfile storage structure to support the memtable build faster (may use gob).
 - [ ] Increased use of flatbuffers build options to support faster reading speed.
-- [ ] Use mmap to read data file that on disk.
+- [x] Use mmap to read data file that on disk.
 - [ ] Embedded lua script interpreter to support the execution of operations with complex logic.
 - [ ] Extend to build complex data structures with the same interface as Redis, such as List, Hash, Set, ZSet, Bitmap, etc.
 - [ ] Extend protocol support for Redis to act as a KV storage server in the network.
