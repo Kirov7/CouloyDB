@@ -28,11 +28,26 @@ type TcpSliceRouterContext struct {
 }
 
 func newTcpSliceRouterContext(conn net.Conn, r *TcpSliceRouter, ctx context.Context) *TcpSliceRouterContext {
-	newTcpSliceGroup := &TcpSliceGroup{}
-	*newTcpSliceGroup = *r.group
-	c := &TcpSliceRouterContext{conn: conn, TcpSliceGroup: newTcpSliceGroup, Ctx: ctx}
+	c := &TcpSliceRouterContext{conn: conn, TcpSliceGroup: r.group, Ctx: ctx}
 	c.Reset()
 	return c
+}
+
+func (c *TcpSliceRouterContext) GetConn() net.Conn {
+	return c.conn
+}
+
+func (c *TcpSliceRouterContext) GetClientConn() *Conn {
+	return c.Ctx.Value(ConnContextKey).(*Conn)
+}
+
+func (c *TcpSliceRouterContext) Write(bytes []byte) error {
+	_, err := c.conn.Write(bytes)
+	return err
+}
+
+func (c *TcpSliceRouterContext) Read(key interface{}) interface{} {
+	return c.Ctx.Value(key)
 }
 
 func (c *TcpSliceRouterContext) Get(key interface{}) interface{} {
@@ -41,6 +56,10 @@ func (c *TcpSliceRouterContext) Get(key interface{}) interface{} {
 
 func (c *TcpSliceRouterContext) Set(key, val interface{}) {
 	c.Ctx = context.WithValue(c.Ctx, key, val)
+}
+
+func (c *TcpSliceRouterContext) GetString(key interface{}) string {
+	return c.Ctx.Value(key).(string)
 }
 
 type TcpSliceRouterHandler struct {
@@ -76,6 +95,7 @@ func (g *TcpSliceRouter) Group() *TcpSliceGroup {
 
 func (g *TcpSliceGroup) Use(middlewares ...TcpHandlerFunc) *TcpSliceGroup {
 	g.handlers = append(g.handlers, middlewares...)
+	g.TcpSliceRouter.group = g
 	return g
 }
 

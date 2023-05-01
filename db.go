@@ -138,6 +138,21 @@ func (db *DB) Del(key []byte) error {
 	return nil
 }
 
+func (db *DB) IsExist(key []byte) (bool, error) {
+	if len(key) == 0 {
+		return false, public.ErrKeyIsEmpty
+	}
+	// Check if exist in memory memTable
+	if pos := db.memTable.Get(key); pos == nil {
+		return false, public.ErrKeyNotFound
+	}
+	return true, nil
+}
+
+func (db *DB) Size() int {
+	return db.memTable.Count()
+}
+
 // ListKeys get all the key and return
 func (db *DB) ListKeys() [][]byte {
 	iterator := db.memTable.Iterator(false)
@@ -166,6 +181,28 @@ func (db *DB) Fold(fn func(key []byte, value []byte) bool) error {
 			break
 		}
 	}
+	return nil
+}
+
+func (db *DB) Clear() error {
+	err := db.Close()
+	if err != nil {
+		return err
+	}
+
+	err = os.RemoveAll(db.options.DirPath)
+	if err != nil {
+		return err
+	}
+
+	fl := flock.New(filepath.Join(db.options.DirPath, public.FileLockName))
+	if getLock, err := fl.TryLock(); err != nil {
+		return err
+	} else if !getLock {
+		return public.ErrDirOccupied
+	}
+
+	db.memTable = meta.NewMemTable(db.options.IndexType)
 	return nil
 }
 

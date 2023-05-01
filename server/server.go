@@ -67,7 +67,7 @@ func (s *TcpServer) ListenAndServe() error {
 	return s.Serve(listener)
 }
 
-func (s *TcpServer) Close() error {
+func (s *TcpServer) Close(ctx context.Context) error {
 	atomic.StoreInt32(&s.inShutdown, 1)
 	close(s.doneChan)
 	return s.l.Close()

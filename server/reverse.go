@@ -8,8 +8,9 @@ import (
 	"time"
 )
 
-func NewTcpLoadBalanceReverseProxy(c *TcpSliceRouterContext, addr string) *TcpReverseProxy {
+func NewTcpReverseProxy(c *TcpSliceRouterContext) *TcpReverseProxy {
 	return func() *TcpReverseProxy {
+		addr := c.GetString(ForwardAddrContextKey)
 		return &TcpReverseProxy{
 			ctx:             c.Ctx,
 			Addr:            addr,
@@ -56,7 +57,6 @@ func (trp *TcpReverseProxy) keepAlivePeriod() time.Duration {
 
 // ServeTCP Pass in the upstream connection, where the downstream connection and data exchange are completed
 func (trp *TcpReverseProxy) ServeTCP(ctx context.Context, src net.Conn) {
-	//设置连接超时
 	var cancel context.CancelFunc
 	if trp.DialTimeout >= 0 {
 		ctx, cancel = context.WithTimeout(ctx, trp.dialTimeout())

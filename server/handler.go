@@ -10,6 +10,5 @@ type HandleFunc func(ctx context.Context, conn net.Conn)
 
 // TCPHandler represents application handler over tcp
 type TCPHandler interface {
-	Close() error
 	ServeTCP(ctx context.Context, conn net.Conn)
 }
