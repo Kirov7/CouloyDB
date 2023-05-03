@@ -87,7 +87,6 @@ func (s *TcpServer) Serve(l net.Listener) error {
 	if s.NotifyStarted != nil {
 		go s.NotifyStarted()
 	}
-	fmt.Printf("== 开始tcp服务\n")
 	for {
 		rw, e := l.Accept()
 		if e != nil {
@@ -99,7 +98,7 @@ func (s *TcpServer) Serve(l net.Listener) error {
 			fmt.Printf("accept fail, err: %v\n", e)
 			continue
 		}
-		fmt.Printf("get new conn: %s", rw.RemoteAddr())
+		//fmt.Printf("get new conn: %s", rw.RemoteAddr())
 		go s.newConn(rw).serve(ctx)
 	}
 }

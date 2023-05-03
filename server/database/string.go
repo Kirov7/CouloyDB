@@ -1,7 +1,6 @@
 package database
 
 import (
-	"fmt"
 	"github.com/Kirov7/CouloyDB/server/resp/reply"
 )
 
@@ -24,7 +23,7 @@ func (db *SingleDB) getAsString(key string) ([]byte, reply.ErrorReply) {
 // execGet returns string value bound to the given key
 func execGet(db *SingleDB, args [][]byte) reply.Reply {
 	key := string(args[0])
-	fmt.Println("收到get请求, key: ", key)
+	//fmt.Println("get request received, key: ", key)
 	bytes, err := db.getAsString(key)
 	if err != nil {
 		return err
@@ -39,7 +38,7 @@ func execGet(db *SingleDB, args [][]byte) reply.Reply {
 func execSet(db *SingleDB, args [][]byte) reply.Reply {
 	key := string(args[0])
 	value := args[1]
-	fmt.Println("收到set请求, key: ", key, " value: ", value)
+	//fmt.Println("set request received, key: ", key, " value: ", value)
 	entity := &DataEntity{
 		Data:    value,
 		KeyType: STRING_TYPE,

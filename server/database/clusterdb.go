@@ -59,7 +59,6 @@ func NewClusterDB(opt options.KuloyOptions) *ClusterDatabase {
 	//}
 
 	JoinClusterFunc = func() {
-		log.Println("== JoinClusterFunc开始运行")
 		ips := getIPs(opt.Peers...)
 		_, err = cluster.members.Join(ips)
 		if err != nil {
@@ -76,7 +75,6 @@ func NewClusterDB(opt options.KuloyOptions) *ClusterDatabase {
 				})
 			}
 		}
-		log.Println("== JoinClusterFunc运行结束")
 	}
 	return cluster
 }
@@ -116,15 +114,15 @@ func (cluster *ClusterDatabase) Exec(c *server.Conn, cmdLine [][]byte) (result r
 func defaultFunc(cluster *ClusterDatabase, c *server.Conn, args [][]byte) reply.Reply {
 	key := string(args[1])
 	peer, _ := cluster.consistent.Get(key)
-	fmt.Println("key: ", key, "  ->  peer: ", peer)
+	//fmt.Println("key: ", key, "  ->  peer: ", peer)
 	return cluster.relay(peer, c, args)
 }
 
 func (cluster *ClusterDatabase) getPeerClient(peer string) (*client.Client, error) {
-	fmt.Println("peers: ")
-	for k, _ := range cluster.peerConnection {
-		fmt.Println(k)
-	}
+	//fmt.Println("peers: ")
+	//for k, _ := range cluster.peerConnection {
+	//	fmt.Println(k)
+	//}
 	factory, ok := cluster.peerConnection[peer]
 	if !ok {
 		return nil, errors.New("connection factory not found")
@@ -180,7 +178,7 @@ func (cluster *ClusterDatabase) broadcast(c *server.Conn, args [][]byte) map[str
 type ClusterEventHandler struct{}
 
 func (cluster *ClusterDatabase) NotifyJoin(n *memberlist.Node) {
-	fmt.Println("joined a new node: ", n.Name, "  ", n.Addr)
+	//fmt.Println("joined a new node: ", n.Name, "  ", n.Addr)
 	cluster.consistent.Add(n.Name)
 	if _, ok := cluster.peerConnection[n.Name]; !ok {
 		cluster.peerConnection[n.Name] = pool.NewObjectPoolWithDefaultConfig(context.Background(), &client.ConnectionFactory{Peer: n.Name})
@@ -188,7 +186,7 @@ func (cluster *ClusterDatabase) NotifyJoin(n *memberlist.Node) {
 }
 
 func (cluster *ClusterDatabase) NotifyLeave(n *memberlist.Node) {
-	fmt.Println("leaved a node: ", n.Name, "  ", n.Addr)
+	//fmt.Println("leaved a node: ", n.Name, "  ", n.Addr)
 	cluster.consistent.Remove(n.Name)
 	delete(cluster.peerConnection, n.Name)
 }
