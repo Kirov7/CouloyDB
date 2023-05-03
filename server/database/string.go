@@ -1,10 +1,19 @@
 package database
 
 import (
+	"fmt"
 	"github.com/Kirov7/CouloyDB/server/resp/reply"
 )
 
-func (db *DB) getAsString(key string) ([]byte, reply.ErrorReply) {
+func init() {
+	RegisterCommand("Get", execGet, defaultFunc, 2)
+	RegisterCommand("Set", execSet, defaultFunc, -3)
+	RegisterCommand("SetNx", execSetNX, defaultFunc, 3)
+	RegisterCommand("GetSet", execGetSet, defaultFunc, 3)
+	RegisterCommand("StrLen", execStrLen, defaultFunc, 2)
+}
+
+func (db *SingleDB) getAsString(key string) ([]byte, reply.ErrorReply) {
 	entity, ok := db.GetEntity(key)
 	if !ok {
 		return nil, nil
@@ -13,8 +22,9 @@ func (db *DB) getAsString(key string) ([]byte, reply.ErrorReply) {
 }
 
 // execGet returns string value bound to the given key
-func execGet(db *DB, args [][]byte) reply.Reply {
+func execGet(db *SingleDB, args [][]byte) reply.Reply {
 	key := string(args[0])
+	fmt.Println("收到get请求, key: ", key)
 	bytes, err := db.getAsString(key)
 	if err != nil {
 		return err
@@ -26,9 +36,10 @@ func execGet(db *DB, args [][]byte) reply.Reply {
 }
 
 // execSet sets string value and time to live to the given key
-func execSet(db *DB, args [][]byte) reply.Reply {
+func execSet(db *SingleDB, args [][]byte) reply.Reply {
 	key := string(args[0])
 	value := args[1]
+	fmt.Println("收到set请求, key: ", key, " value: ", value)
 	entity := &DataEntity{
 		Data:    value,
 		KeyType: STRING_TYPE,
@@ -38,7 +49,7 @@ func execSet(db *DB, args [][]byte) reply.Reply {
 }
 
 // execSetNX sets string if not exists
-func execSetNX(db *DB, args [][]byte) reply.Reply {
+func execSetNX(db *SingleDB, args [][]byte) reply.Reply {
 	key := string(args[0])
 	value := args[1]
 	entity := &DataEntity{
@@ -50,7 +61,7 @@ func execSetNX(db *DB, args [][]byte) reply.Reply {
 }
 
 // execGetSet sets value of a string-type key and returns its old value
-func execGetSet(db *DB, args [][]byte) reply.Reply {
+func execGetSet(db *SingleDB, args [][]byte) reply.Reply {
 	key := string(args[0])
 	value := args[1]
 
@@ -64,7 +75,7 @@ func execGetSet(db *DB, args [][]byte) reply.Reply {
 }
 
 // execStrLen returns len of string value bound to the given key
-func execStrLen(db *DB, args [][]byte) reply.Reply {
+func execStrLen(db *SingleDB, args [][]byte) reply.Reply {
 	key := string(args[0])
 	entity, exists := db.GetEntity(key)
 	if !exists {
@@ -72,12 +83,4 @@ func execStrLen(db *DB, args [][]byte) reply.Reply {
 	}
 	old := entity.Data
 	return reply.MakeIntReply(int64(len(old)))
-}
-
-func init() {
-	RegisterCommand("Get", execGet, 2)
-	RegisterCommand("Set", execSet, -3)
-	RegisterCommand("SetNx", execSetNX, 3)
-	RegisterCommand("GetSet", execGetSet, 3)
-	RegisterCommand("StrLen", execStrLen, 2)
 }

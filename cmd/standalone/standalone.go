@@ -8,6 +8,7 @@ import (
 	"github.com/Kirov7/CouloyDB/meta"
 	"github.com/Kirov7/CouloyDB/server"
 	"github.com/Kirov7/CouloyDB/server/resp"
+	"github.com/Kirov7/CouloyDB/server/resp/options"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"log"
@@ -79,22 +80,24 @@ var standaloneCmd = &cobra.Command{
 			log.Fatal("Error: Cannot get the local IPv4 address")
 		}
 
-		opts := CouloyDB.Options{
-			DirPath:       dirPath,
-			DataFileSize:  dataFileSize,
-			SyncWrites:    syncWrites,
-			MergeInterval: mergeInterval,
+		kuloyOpts := options.KuloyOptions{
+			StandaloneOpt: CouloyDB.Options{
+				DirPath:       dirPath,
+				DataFileSize:  dataFileSize,
+				SyncWrites:    syncWrites,
+				MergeInterval: mergeInterval,
+			},
 		}
 		switch indexType {
 		case "hashmap":
-			opts.IndexType = meta.Btree
+			kuloyOpts.StandaloneOpt.IndexType = meta.Btree
 		case "btree":
-			opts.IndexType = meta.Btree
+			kuloyOpts.StandaloneOpt.IndexType = meta.Btree
 		case "art":
-			opts.IndexType = meta.ART
+			kuloyOpts.StandaloneOpt.IndexType = meta.ART
 		}
 
-		resp.SetupEngine(opts)
+		resp.SetupEngine(kuloyOpts, false)
 		kuloyServerStart(realAddr)
 	},
 }
@@ -106,7 +109,7 @@ func kuloyServerStart(addr string) {
 	)
 
 	tailFunc := func(c *server.TcpSliceRouterContext) server.TCPHandler {
-		return server.NewTcpReverseProxy(c)
+		return server.NewTailService(c)
 	}
 
 	routerHandler := server.NewTcpSliceRouterHandler(tailFunc, router)
@@ -145,7 +148,7 @@ func kuloyServerStart(addr string) {
 }
 
 func init() {
-	standaloneCmd.Flags().StringVarP(&configFile, "cpath", "f", "", "Path of the configuration file in yaml, json and toml format (optional)")
+	standaloneCmd.Flags().StringVarP(&configFile, "cpath", "c", "", "Path of the configuration file in yaml, json and toml format (optional)")
 
 	standaloneCmd.Flags().StringVarP(&cmdPort, "port", "p", ":9736", "Address of the host on the network (For example 192.168.1.151:9736) [default 0.0.0.0:9736]")
 

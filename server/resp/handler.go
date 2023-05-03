@@ -1,9 +1,9 @@
 package resp
 
 import (
-	"github.com/Kirov7/CouloyDB"
 	"github.com/Kirov7/CouloyDB/server"
 	"github.com/Kirov7/CouloyDB/server/database"
+	"github.com/Kirov7/CouloyDB/server/resp/options"
 	"github.com/Kirov7/CouloyDB/server/resp/parser"
 	"github.com/Kirov7/CouloyDB/server/resp/reply"
 	"io"
@@ -23,14 +23,17 @@ var respHandler *RespHandler
 // RespHandler implements tcp.Handler and serves as a redis handler
 type RespHandler struct {
 	activeConn sync.Map // *client -> placeholder
-	db         *database.Database
+	db         database.Database
 	inShutdown int32 // refusing new client and new request
 }
 
 // SetupEngine creates a RespHandler instance
-func SetupEngine(opt CouloyDB.Options) {
-	respHandler = &RespHandler{
-		db: database.NewDatabase(opt),
+func SetupEngine(opt options.KuloyOptions, isCluster bool) {
+	respHandler = &RespHandler{}
+	if isCluster {
+		respHandler.db = database.NewClusterDB(opt)
+	} else {
+		respHandler.db = database.NewMutilDB(opt.StandaloneOpt)
 	}
 }
 
@@ -66,8 +69,8 @@ func RespMiddleware() func(c *server.TcpSliceRouterContext) {
 					payload.Err == io.ErrUnexpectedEOF ||
 					strings.Contains(payload.Err.Error(), "use of closed network connection") {
 					// connection closed
-					respHandler.closeConn(&conn)
 					log.Println("connection closed: " + ctx.GetString(server.RemoteAddrContextKey))
+					respHandler.closeConn(&conn)
 					ctx.Abort()
 					return
 				}
@@ -75,8 +78,8 @@ func RespMiddleware() func(c *server.TcpSliceRouterContext) {
 				errReply := reply.MakeErrReply(payload.Err.Error())
 				err := ctx.Write(errReply.ToBytes())
 				if err != nil {
-					respHandler.closeConn(&conn)
 					log.Println("connection closed: " + ctx.GetString(server.RemoteAddrContextKey))
+					respHandler.closeConn(&conn)
 					ctx.Abort()
 					return
 				}

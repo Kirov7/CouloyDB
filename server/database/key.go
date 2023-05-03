@@ -1,11 +1,23 @@
 package database
 
 import (
+	"github.com/Kirov7/CouloyDB/public/utils/wildcard"
+	"github.com/Kirov7/CouloyDB/server"
 	"github.com/Kirov7/CouloyDB/server/resp/reply"
 )
 
+func init() {
+	RegisterCommand("Del", execDel, execDelCluster, -2)
+	RegisterCommand("Exists", execExists, defaultFunc, -2)
+	RegisterCommand("Keys", execKeys, nil, 2)
+	RegisterCommand("FlushDB", execFlushDB, execFlushDBCluster, -1)
+	RegisterCommand("Type", execType, defaultFunc, 2)
+	RegisterCommand("Rename", execRename, execRenameCluster, 3)
+	RegisterCommand("RenameNx", execRenameNx, execRenameCluster, 3)
+}
+
 // execDel removes a key from db
-func execDel(db *DB, args [][]byte) reply.Reply {
+func execDel(db *SingleDB, args [][]byte) reply.Reply {
 	keys := make([]string, len(args))
 	for i, v := range args {
 		keys[i] = string(v)
@@ -16,7 +28,7 @@ func execDel(db *DB, args [][]byte) reply.Reply {
 }
 
 // execExists checks if a is existed in db
-func execExists(db *DB, args [][]byte) reply.Reply {
+func execExists(db *SingleDB, args [][]byte) reply.Reply {
 	result := int64(0)
 	for _, arg := range args {
 		key := string(arg)
@@ -28,13 +40,13 @@ func execExists(db *DB, args [][]byte) reply.Reply {
 }
 
 // execFlushDB removes all data in current db
-func execFlushDB(db *DB, args [][]byte) reply.Reply {
+func execFlushDB(db *SingleDB, args [][]byte) reply.Reply {
 	db.Flush()
 	return &reply.OkReply{}
 }
 
 // execType returns the type of entity, including: string, list, hash, set and zset
-func execType(db *DB, args [][]byte) reply.Reply {
+func execType(db *SingleDB, args [][]byte) reply.Reply {
 	key := string(args[0])
 	entity, exists := db.GetEntity(key)
 	if !exists {
@@ -58,7 +70,7 @@ func execType(db *DB, args [][]byte) reply.Reply {
 }
 
 // execRename a key
-func execRename(db *DB, args [][]byte) reply.Reply {
+func execRename(db *SingleDB, args [][]byte) reply.Reply {
 	if len(args) != 2 {
 		return reply.MakeErrReply("ERR wrong number of arguments for 'rename' command")
 	}
@@ -75,7 +87,7 @@ func execRename(db *DB, args [][]byte) reply.Reply {
 }
 
 // execRenameNx a key, only if the new key does not exist
-func execRenameNx(db *DB, args [][]byte) reply.Reply {
+func execRenameNx(db *SingleDB, args [][]byte) reply.Reply {
 	src := string(args[0])
 	dest := string(args[1])
 
@@ -93,8 +105,8 @@ func execRenameNx(db *DB, args [][]byte) reply.Reply {
 }
 
 // execKeys returns all keys matching the given pattern
-func execKeys(db *DB, args [][]byte) reply.Reply {
-	pattern := CompilePattern(string(args[0]))
+func execKeys(db *SingleDB, args [][]byte) reply.Reply {
+	pattern := wildcard.CompilePattern(string(args[0]))
 	result := make([][]byte, 0)
 	db.data.ForEach(func(key []byte, val []byte) bool {
 		if pattern.IsMatch(string(key)) {
@@ -105,143 +117,76 @@ func execKeys(db *DB, args [][]byte) reply.Reply {
 	return reply.MakeMultiBulkReply(result)
 }
 
-func init() {
-	RegisterCommand("Del", execDel, -2)
-	RegisterCommand("Exists", execExists, -2)
-	RegisterCommand("Keys", execKeys, 2)
-	RegisterCommand("FlushDB", execFlushDB, -1)
-	RegisterCommand("Type", execType, 2)
-	RegisterCommand("Rename", execRename, 3)
-	RegisterCommand("RenameNx", execRenameNx, 3)
-}
-
-/* wildcard */
-const (
-	normal     = iota
-	all        // *
-	any        // ?
-	setSymbol  // []
-	rangSymbol // [a-b]
-	negSymbol  // [^a]
-)
-
-type item struct {
-	character byte
-	set       map[byte]bool
-	typeCode  int
-}
-
-func (i *item) contains(c byte) bool {
-	if i.typeCode == setSymbol {
-		_, ok := i.set[c]
-		return ok
-	} else if i.typeCode == rangSymbol {
-		if _, ok := i.set[c]; ok {
-			return true
+// execDelCluster atomically removes given writeKeys from cluster, writeKeys can be distributed on any node
+// if the given writeKeys are distributed on different node, Del will use try-commit-catch to remove them
+func execDelCluster(cluster *ClusterDatabase, c *server.Conn, args [][]byte) reply.Reply {
+	replies := cluster.broadcast(c, args)
+	var errReply reply.ErrorReply
+	var deleted int64 = 0
+	for _, v := range replies {
+		if reply.IsErrorReply(v) {
+			errReply = v.(reply.ErrorReply)
+			break
 		}
-		var (
-			min uint8 = 255
-			max uint8 = 0
-		)
-		for k := range i.set {
-			if min > k {
-				min = k
-			}
-			if max < k {
-				max = k
-			}
+		intReply, ok := v.(*reply.IntReply)
+		if !ok {
+			errReply = reply.MakeErrReply("error")
 		}
-		return c >= min && c <= max
-	} else {
-		_, ok := i.set[c]
-		return !ok
+		deleted += intReply.Code
 	}
+
+	if errReply == nil {
+		return reply.MakeIntReply(deleted)
+	}
+	return reply.MakeErrReply("error occurs: " + errReply.Error())
 }
 
-// Pattern represents a wildcard pattern
-type Pattern struct {
-	items []*item
-}
-
-// CompilePattern convert wildcard string to Pattern
-func CompilePattern(src string) *Pattern {
-	items := make([]*item, 0)
-	escape := false
-	inSet := false
-	var set map[byte]bool
-	for _, v := range src {
-		c := byte(v)
-		if escape {
-			items = append(items, &item{typeCode: normal, character: c})
-			escape = false
-		} else if c == '*' {
-			items = append(items, &item{typeCode: all})
-		} else if c == '?' {
-			items = append(items, &item{typeCode: any})
-		} else if c == '\\' {
-			escape = true
-		} else if c == '[' {
-			if !inSet {
-				inSet = true
-				set = make(map[byte]bool)
-			} else {
-				set[c] = true
-			}
-		} else if c == ']' {
-			if inSet {
-				inSet = false
-				typeCode := setSymbol
-				if _, ok := set['-']; ok {
-					typeCode = rangSymbol
-					delete(set, '-')
-				}
-				if _, ok := set['^']; ok {
-					typeCode = negSymbol
-					delete(set, '^')
-				}
-				items = append(items, &item{typeCode: typeCode, set: set})
-			} else {
-				items = append(items, &item{typeCode: normal, character: c})
-			}
-		} else {
-			if inSet {
-				set[c] = true
-			} else {
-				items = append(items, &item{typeCode: normal, character: c})
-			}
+// execFlushDBCluster removes all data in current database
+func execFlushDBCluster(cluster *ClusterDatabase, c *server.Conn, args [][]byte) reply.Reply {
+	replies := cluster.broadcast(c, args)
+	var errReply reply.ErrorReply
+	for _, v := range replies {
+		if reply.IsErrorReply(v) {
+			errReply = v.(reply.ErrorReply)
+			break
 		}
 	}
-	return &Pattern{
-		items: items,
+	if errReply == nil {
+		return &reply.OkReply{}
 	}
+	return reply.MakeErrReply("error occurs: " + errReply.Error())
 }
 
-// IsMatch returns whether the given string matches pattern
-func (p *Pattern) IsMatch(s string) bool {
-	if len(p.items) == 0 {
-		return len(s) == 0
+// execRenameCluster renames a key, the origin and the destination must within the same node
+func execRenameCluster(cluster *ClusterDatabase, c *server.Conn, args [][]byte) reply.Reply {
+	if len(args) != 3 {
+		return reply.MakeErrReply("ERR wrong number of arguments for 'rename' command")
 	}
-	m := len(s)
-	n := len(p.items)
-	table := make([][]bool, m+1)
-	for i := 0; i < m+1; i++ {
-		table[i] = make([]bool, n+1)
+	src := string(args[1])
+	dest := string(args[2])
+
+	srcPeer, _ := cluster.consistent.Get(src)
+	destPeer, _ := cluster.consistent.Get(dest)
+
+	if srcPeer != destPeer {
+		return reply.MakeErrReply("ERR rename must within one slot in cluster mode")
 	}
-	table[0][0] = true
-	for j := 1; j < n+1; j++ {
-		table[0][j] = table[0][j-1] && p.items[j-1].typeCode == all
+	return cluster.relay(srcPeer, c, args)
+}
+
+// execKeysCluster renames a key, the origin and the destination must within the same node
+func execKeysCluster(cluster *ClusterDatabase, c *server.Conn, args [][]byte) reply.Reply {
+	if len(args) != 3 {
+		return reply.MakeErrReply("ERR wrong number of arguments for 'rename' command")
 	}
-	for i := 1; i < m+1; i++ {
-		for j := 1; j < n+1; j++ {
-			if p.items[j-1].typeCode == all {
-				table[i][j] = table[i-1][j] || table[i][j-1]
-			} else {
-				table[i][j] = table[i-1][j-1] &&
-					(p.items[j-1].typeCode == any ||
-						(p.items[j-1].typeCode == normal && uint8(s[i-1]) == p.items[j-1].character) ||
-						(p.items[j-1].typeCode >= setSymbol && p.items[j-1].contains(s[i-1])))
-			}
-		}
+	src := string(args[1])
+	dest := string(args[2])
+
+	srcPeer, _ := cluster.consistent.Get(src)
+	destPeer, _ := cluster.consistent.Get(dest)
+
+	if srcPeer != destPeer {
+		return reply.MakeErrReply("ERR rename must within one slot in cluster mode")
 	}
-	return table[m][n]
+	return cluster.relay(srcPeer, c, args)
 }

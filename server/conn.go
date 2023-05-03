@@ -22,6 +22,10 @@ func (s *TcpServer) newConn(rwc net.Conn) *Conn {
 		server: s,
 		rwc:    rwc,
 	}
+	c.cancelCtx = func() {
+		c.rwc.Close()
+		c.server.Close(context.Background())
+	}
 	if d := c.server.ReadTimeout; d != 0 {
 		c.rwc.SetReadDeadline(time.Now().Add(d))
 	}
@@ -53,6 +57,7 @@ func (c *Conn) serve(ctx context.Context) {
 	}()
 	c.remoteAddr = c.rwc.RemoteAddr().String()
 	ctx = context.WithValue(ctx, ConnContextKey, c)
+	ctx = context.WithValue(ctx, RemoteAddrContextKey, c.remoteAddr)
 	if c.server.Handler == nil {
 		panic("handler empty")
 	}

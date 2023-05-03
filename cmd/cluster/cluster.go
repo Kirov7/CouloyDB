@@ -1,12 +1,24 @@
 package cluster
 
 import (
+	"context"
 	"fmt"
+	"github.com/Kirov7/CouloyDB"
 	"github.com/Kirov7/CouloyDB/cmd/root"
+	"github.com/Kirov7/CouloyDB/meta"
+	"github.com/Kirov7/CouloyDB/server"
+	"github.com/Kirov7/CouloyDB/server/database"
+	"github.com/Kirov7/CouloyDB/server/resp"
+	"github.com/Kirov7/CouloyDB/server/resp/options"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"log"
+	"net"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
+	"time"
 )
 
 var configFile string
@@ -41,23 +53,95 @@ var clusterCmd = &cobra.Command{
 		cluster := viper.GetStringSlice("cluster.peers")
 		self := viper.GetInt("cluster.self")
 
-		writeSync := viper.GetBool("engine.writeSync")
+		syncWrites := viper.GetBool("engine.syncWrites")
+		dirPath := viper.GetString("engine.dirPath")
+		dataFileSize := viper.GetInt64("engine.dataFileSize")
 		indexType := viper.GetString("engine.indexType")
-		mergeInterval := viper.GetInt("engine.mergeInterval")
+		mergeInterval := viper.GetInt64("engine.mergeInterval")
 
-		// Output parsed parameter values
-		fmt.Printf("addr List: %v\n", cluster)
-		fmt.Printf("Location of the machine: %d\n", self)
-		fmt.Printf("Whether to enable write synchronization: %t\n", writeSync)
-		fmt.Printf("Use index types: %s\n", indexType)
-		fmt.Printf("merge interval is frequent: %d秒\n", mergeInterval)
+		addr := cluster[self]
+		_, realPort, err := net.SplitHostPort(addr)
+		if err != nil {
+			log.Fatal("Fail read Port: ", err)
+			return
+		}
+		realAddr := "0.0.0.0" + ":" + realPort
+
+		kuloyOpts := options.KuloyOptions{
+			StandaloneOpt: CouloyDB.Options{
+				DirPath:       dirPath,
+				DataFileSize:  dataFileSize,
+				SyncWrites:    syncWrites,
+				MergeInterval: mergeInterval,
+			},
+			Peers: cluster,
+			Self:  self,
+		}
+		switch indexType {
+		case "hashmap":
+			kuloyOpts.StandaloneOpt.IndexType = meta.Btree
+		case "btree":
+			kuloyOpts.StandaloneOpt.IndexType = meta.Btree
+		case "art":
+			kuloyOpts.StandaloneOpt.IndexType = meta.ART
+		}
+
+		resp.SetupEngine(kuloyOpts, true)
+		kuloyServerStart(realAddr)
 	},
 }
 
-func init() {
-	clusterCmd.Flags().StringVarP(&configFile, "cpath", "f", "", "Path of the configuration file in yaml, json and toml format (optional)")
+func kuloyServerStart(addr string) {
+	router := server.NewTcpSliceRouter()
+	router.Group().Use(
+		resp.RespMiddleware(),
+	)
 
-	clusterCmd.Flags().StringVarP(&cmdPeers, "peers", "c", "", "All the instances in the cluster ip:port, separated by commas (such as 192.168.1.1:8080,192168:1.2:8080)")
+	tailFunc := func(c *server.TcpSliceRouterContext) server.TCPHandler {
+		return server.NewTailService(c)
+	}
+
+	routerHandler := server.NewTcpSliceRouterHandler(tailFunc, router)
+
+	fmt.Println("== tpcSever : addr : ", addr)
+	srv := &server.TcpServer{
+		Addr:             addr,
+		Handler:          routerHandler,
+		KeepAliveTimeout: 5 * time.Minute,
+		NotifyStarted:    database.JoinClusterFunc,
+	}
+
+	go func() {
+		log.Printf("kuloy cluster peer server running in %s \n", srv.Addr)
+		if err := srv.ListenAndServe(); err != nil && err != server.ErrServerClosed {
+			log.Fatalln(err)
+		}
+	}()
+
+	quit := make(chan os.Signal)
+	// SIGINT User sends INTR character (Ctrl + C) to trigger kill -2
+	// End of SIGTERM program (can be captured, blocked, or ignored)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+	log.Println("Shutting Down kuloy server...")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if err := srv.Close(ctx); err != nil {
+		log.Fatalln("kuloy server shutdown, cause by : ", err)
+	}
+
+	select {
+	case <-ctx.Done():
+		log.Println("wait timeout...")
+	}
+	log.Println("kuloy server stop success...")
+}
+
+func init() {
+	clusterCmd.Flags().StringVarP(&configFile, "cpath", "c", "", "Path of the configuration file in yaml, json and toml format (optional)")
+
+	clusterCmd.Flags().StringVarP(&cmdPeers, "peers", "p", "", "All the instances in the cluster ip:port, separated by commas (such as 192.168.1.1:8080,192168:1.2:8080)")
 	cmdSelf = clusterCmd.Flags().Int64P("self", "s", 0, "Local Index in the cluster (optional)")
 
 	clusterCmd.Flags().StringVarP(&cmdDirPath, "dpath", "d", "./datafile", "Directory Path where data logs are stored [default at ./datafile]")
