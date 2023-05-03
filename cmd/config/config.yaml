@@ -1,0 +1,14 @@
+cluster:
+  peers:
+    - 192.168.1.114:9736
+    - 192.168.1.151:9736
+    - 192.168.1.152:9736
+  self: 0
+standalone:
+  addr: "127.0.0.1:9736"
+engine:
+  dirPath: "/tmp/kuloy-test2"
+  dataFileSize: 268435456
+  indexType: "hashmap"
+  syncWrites: false
+  mergeInterval: 28800
