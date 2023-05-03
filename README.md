@@ -212,6 +212,7 @@ func TestKuloy(t *testing.T) {
 - [x] Extend protocol support for Redis to act as a KV storage server in the network. [ has completed the basic implementation of Kuloy ]
 - [ ] Extend to build complex data structures with the same interface as Redis, such as List, Hash, Set, ZSet, Bitmap, etc.
 - [x] Extend easy to use distributed solution (may support both gossip and raft protocols for different usage scenarios) [ has supported gossip ]
-- [ ] Extend to add backup nodes for a single node in a consistent hash cluster
+- [ ] Extend to add backup nodes for a single node in a consistent hash cluster.
+- [ ] Add the necessary Rehash functionality.
 
 <br>
