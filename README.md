@@ -15,7 +15,7 @@ Kuloy is a KV storage service based on CouloyDB. It is compatible with Redis pro
 
 
 ## How do I use CouloyDB & Kuloy ?
-
+> Note that Couloy&Kuloy has not been officially released and does not guarantee completely reliable compatibility!!!
 ### Fast start: CouloyDB 
 
 import the library
