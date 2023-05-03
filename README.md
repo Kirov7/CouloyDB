@@ -4,7 +4,7 @@ CouloyDB's goal is to compromise between performance and storage costs, as an al
 
 
 
-## What is CouloyDB && Kuloy ?
+## What is CouloyDB & Kuloy ?
 
 CouloyDB is a fast KV store engine based on bitcask model
 
@@ -15,7 +15,7 @@ Kuloy is a KV storage service based on CouloyDB. It is compatible with Redis pro
 
 
 ## How do I use CouloyDB & Kuloy ?
-> Note that Couloy&Kuloy has not been officially released and does not guarantee completely reliable compatibility!!!
+> Note that CouloyDB & Kuloy has not been officially released and does not guarantee completely reliable compatibility!!!
 ### Fast start: CouloyDB 
 
 import the library
