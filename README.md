@@ -99,6 +99,8 @@ mv run kuloy
 Then you can deploy quickly through configuration files or command line arguments
 
 You can specify all configuration items through the configuration file or command line parameters. If there is any conflict, the configuration file prevails
+You need to modify the configuration file and do the same thing on each node
+And make sure your port 7946 is bound
 
 `config.yaml`
 
