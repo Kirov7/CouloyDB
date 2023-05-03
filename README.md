@@ -88,6 +88,8 @@ git clone https://github.com/Kirov7/CouloyDB
 
 cd ./CouloyDB/cmd
 
+go mod tidy
+
 go build run.go
 
 mv run kuloy
