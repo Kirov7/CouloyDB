@@ -1,5 +1,5 @@
-# 🔥 CouloyDB & Kuloy
-
+# 🔥 CouloyDB & Kuloy 🔥
+ 
 CouloyDB's goal is to compromise between performance and storage costs, as an alternative to Redis in some scenarios.
 
 ## 🌟 What is CouloyDB & Kuloy?
