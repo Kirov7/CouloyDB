@@ -1,6 +1,8 @@
-# 🔥 CouloyDB & Kuloy 🔥
+# CouloyDB & Kuloy
  
 CouloyDB's goal is to compromise between performance and storage costs, as an alternative to memory KV storage like Redis in some scenarios.
+
+![icon.png](https://img1.imgtp.com/2023/05/05/WZgs6o2t.png)
 
 ## 🌟 What is CouloyDB & Kuloy?
 
