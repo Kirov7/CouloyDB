@@ -14,7 +14,7 @@ CouloyDB's goal is to compromise between performance and storage costs, as an al
 
 
 
-## 🚀 How do I use CouloyDB & Kuloy?
+## 🚀 How to use CouloyDB & Kuloy?
 
 > ⚠️ Note that CouloyDB & Kuloy has not been officially released and does not guarantee completely reliable compatibility!!!
 
