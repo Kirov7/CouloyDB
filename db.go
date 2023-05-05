@@ -246,10 +246,10 @@ func (db *DB) mergeWorker() {
 	for {
 		select {
 		case <-db.mergeChan:
-			_ = db.Sync()
+			_ = db.Merge()
 			mergeTicker.Reset(mergeTimeout)
 		case <-mergeTicker.C:
-			_ = db.Sync()
+			_ = db.Merge()
 		}
 	}
 }
