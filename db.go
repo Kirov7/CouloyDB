@@ -241,13 +241,28 @@ func (db *DB) Sync() error {
 }
 
 func (db *DB) mergeWorker() {
-	mergeTimeout := time.Duration(db.options.MergeInterval) * time.Second
-	mergeTicker := time.NewTicker(mergeTimeout)
+	var mergeInterval time.Duration
+	var mergeTicker *time.Ticker
+	var needTicker bool
+
+	// The minimum interval for merging is 1 minute. Otherwise, the merge is not scheduled by default
+	if db.options.MergeInterval >= 60 {
+		mergeInterval = time.Duration(db.options.MergeInterval) * time.Second
+		mergeTicker = time.NewTicker(mergeInterval)
+		needTicker = true
+	} else {
+		mergeTicker = time.NewTicker(1)
+		mergeTicker.Stop()
+		needTicker = false
+	}
 	for {
 		select {
 		case <-db.mergeChan:
 			_ = db.Merge()
-			mergeTicker.Reset(mergeTimeout)
+
+			if needTicker {
+				mergeTicker.Reset(mergeInterval)
+			}
 		case <-mergeTicker.C:
 			_ = db.Merge()
 		}
