@@ -189,15 +189,15 @@ func TestKuloy(t *testing.T) {
 
 ## 🔮 What will I do next?
 
--  Implement batch write with transaction semantics.
--  Optimize hintfile storage structure to support the memtable build faster (may use gob).
--  Increased use of flatbuffers build options to support faster reading speed.
--  Use mmap to read data file that on disk. [ however, the official mmap library is not optimized enough and needs to be further optimized ]
--  Embedded lua script interpreter to support the execution of operations with complex logic.
--  Extend protocol support for Redis to act as a KV storage server in the network. [ has completed the basic implementation of Kuloy ]
--  Extend to build complex data structures with the same interface as Redis, such as List, Hash, Set, ZSet, Bitmap, etc.
--  Extend easy-to-use distributed solution (may support both gossip and raft protocols for different usage scenarios) [ has supported gossip ]
--  Extend to add backup nodes for a single node in a consistent hash cluster.
--  Add the necessary Rehash functionality.
+- [x] Implement batch write with transaction semantics.
+- [ ] Optimize hintfile storage structure to support the memtable build faster (may use gob).
+- [ ] Increased use of flatbuffers build options to support faster reading speed.
+- [x] Use mmap to read data file that on disk. [ however, the official mmap library is not optimized enough and needs to be further optimized ]
+- [ ] Embedded lua script interpreter to support the execution of operations with complex logic.
+- [x] Extend protocol support for Redis to act as a KV storage server in the network. [ has completed the basic implementation of Kuloy ]
+- [ ] Extend to build complex data structures with the same interface as Redis, such as List, Hash, Set, ZSet, Bitmap, etc.
+- [x] Extend easy-to-use distributed solution (may support both gossip and raft protocols for different usage scenarios) [ has supported gossip ]
+- [ ] Extend to add backup nodes for a single node in a consistent hash cluster.
+- [ ] Add the necessary Rehash functionality.
 
 <br>
