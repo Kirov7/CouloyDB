@@ -28,7 +28,6 @@ type DB struct {
 	isMerging    bool
 	flock        *flock.Flock
 	bytesWrite   uint64
-	syncChan     chan struct{}
 	mergeChan    chan struct{}
 }
 
@@ -71,6 +70,8 @@ func NewCouloyDB(opt Options) (*DB, error) {
 	if err := db.loadDataFile(); err != nil {
 		return nil, err
 	}
+
+	go db.mergeWorker()
 
 	return db, nil
 }
@@ -239,17 +240,18 @@ func (db *DB) Sync() error {
 	return db.activityFile.Sync()
 }
 
-func (db *DB) syncWorker() {
+func (db *DB) mergeWorker() {
+	mergeTimeout := time.Duration(db.options.MergeInterval) * time.Second
+	mergeTicker := time.NewTicker(mergeTimeout)
 	for {
 		select {
-		case <-db.syncChan:
-
+		case <-db.mergeChan:
+			_ = db.Sync()
+			mergeTicker.Reset(mergeTimeout)
+		case <-mergeTicker.C:
+			_ = db.Sync()
 		}
 	}
-}
-
-func (db *DB) mergeWorker() {
-
 }
 
 func (db *DB) appendLogRecordWithLock(log *data.LogRecord) (*data.LogPos, error) {
