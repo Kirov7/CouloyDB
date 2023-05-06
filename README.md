@@ -102,7 +102,7 @@ You can specify all configuration items through the configuration file or comman
 `config.yaml`:
 
 ```yaml
-yamlCopy codecluster:
+cluster:
   peers:
     - 192.168.1.151:9736
     - 192.168.1.152:9736
