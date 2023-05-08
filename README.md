@@ -97,24 +97,32 @@ mv run kuloy
 
 Then you can deploy quickly through configuration files or command-line arguments.
 
-You can specify all configuration items through the configuration file or command-line parameters. If there is any conflict, the configuration file prevails. You need to modify the configuration file and do the same thing on each node. And make sure your port 7946 is bound.
+You can specify all configuration items through the configuration file or command-line parameters. If there is any conflict, the configuration file prevails. You need to modify the configuration file and do the same thing on each node. And make sure your port 7946 is bound (be used for synchronous cluster status).
 
 `config.yaml`:
 
 ```yaml
 cluster:
+  # all the nodes in the cluster (including itself)
   peers:
     - 192.168.1.151:9736
     - 192.168.1.152:9736
     - 192.168.1.153:9736
+  # local Index in the cluster peers
   self: 0
 standalone:
+  # address of this instance when standalone deployment
   addr: "127.0.0.1:9736"
 engine:
+  # directory Path where data logs are stored
   dirPath: "/tmp/kuloy-test"
+  # maximum byte size per datafile (unit: Byte)
   dataFileSize: 268435456
+  # type of memory index (hashmap/btree/art)
   indexType: "btree"
+  # whether to enable write synchronization
   syncWrites: false
+  # periods for data compaction (unit: Second)
   mergeInterval: 28800
 ```
 
