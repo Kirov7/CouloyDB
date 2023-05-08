@@ -158,7 +158,7 @@ go get github.com/go-redis/redis/v8
 func TestKuloy(t *testing.T) {
 	// Create a Redis client
 	client := redis.NewClient(&redis.Options{
-		Addr:     "192.168.1.153:9736",
+		Addr:     "127.0.0.1:9736",
 		DB:       0,  // Kuloy supports db selection
 	})
 
