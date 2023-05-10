@@ -89,7 +89,7 @@ func (wb *WriteBatch) Commit() error {
 	// write fin mark
 	finishRecord := &data.LogRecord{
 		Key:  encodeKeyWithTxId(public.TX_COMMIT_KEY, txId),
-		Type: data.LogRecordTxnFin,
+		Type: data.LogRecordTxnCommit,
 	}
 	if _, err := wb.db.appendLogRecord(finishRecord); err != nil {
 		return err

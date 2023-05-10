@@ -7,6 +7,7 @@ import (
 	"github.com/Kirov7/CouloyDB/meta"
 	"github.com/Kirov7/CouloyDB/public"
 	"github.com/gofrs/flock"
+	lua "github.com/yuin/gopher-lua"
 	"io"
 	"os"
 	"path/filepath"
@@ -29,6 +30,8 @@ type DB struct {
 	flock        *flock.Flock
 	bytesWrite   uint64
 	mergeChan    chan struct{}
+	L            *lua.LState
+	oracle       *oracle
 }
 
 func NewCouloyDB(opt Options) (*DB, error) {
@@ -57,10 +60,14 @@ func NewCouloyDB(opt Options) (*DB, error) {
 		oldFile:  make(map[uint32]*data.DataFile),
 		memTable: meta.NewMemTable(opt.IndexType),
 		mu:       new(sync.RWMutex),
-		txId:     time.Now().UnixNano(),
 		flock:    fl,
 	}
 
+	if opt.EnableLuaInterpreter {
+		db.initLuaInterpreter()
+	}
+
+	db.initOracle()
 	// load merge file dir
 	if err := db.loadMergeFiles(); err != nil {
 		return nil, err
@@ -241,15 +248,30 @@ func (db *DB) Sync() error {
 }
 
 func (db *DB) mergeWorker() {
-	mergeTimeout := time.Duration(db.options.MergeInterval) * time.Second
-	mergeTicker := time.NewTicker(mergeTimeout)
+	var mergeInterval time.Duration
+	var mergeTicker *time.Ticker
+	var needTicker bool
+
+	// The minimum interval for merging is 1 minute. Otherwise, the merge is not scheduled by default
+	if db.options.MergeInterval >= 60 {
+		mergeInterval = time.Duration(db.options.MergeInterval) * time.Second
+		mergeTicker = time.NewTicker(mergeInterval)
+		needTicker = true
+	} else {
+		mergeTicker = time.NewTicker(1)
+		mergeTicker.Stop()
+		needTicker = false
+	}
 	for {
 		select {
 		case <-db.mergeChan:
-			_ = db.Sync()
-			mergeTicker.Reset(mergeTimeout)
+			_ = db.Merge()
+
+			if needTicker {
+				mergeTicker.Reset(mergeInterval)
+			}
 		case <-mergeTicker.C:
-			_ = db.Sync()
+			_ = db.Merge()
 		}
 	}
 }
@@ -446,11 +468,13 @@ func (db *DB) loadIndex(fids []int) error {
 				updateIndex(realKey, logRecord.Type, logRecordPos)
 			} else {
 				// if the tx has finished, update to memIndex
-				if logRecord.Type == data.LogRecordTxnFin {
+				if logRecord.Type == data.LogRecordTxnCommit {
 					for _, txRecord := range txRecords[txId] {
 						updateIndex(txRecord.Record.Key, txRecord.Record.Type, txRecord.Pos)
 
 					}
+					delete(txRecords, txId)
+				} else if logRecord.Type == data.LogRecordTxnRollback {
 					delete(txRecords, txId)
 				} else {
 					//
@@ -522,7 +546,7 @@ func parseLogRecordKey(key []byte) ([]byte, int64) {
 }
 
 func (db *DB) GetTxId() int64 {
-	return atomic.AddInt64(&db.txId, 1)
+	return db.oracle.GetTxId()
 }
 
 func deleteLessThan[T comparable](s []T, val T) []T {

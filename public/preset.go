@@ -15,6 +15,12 @@ var (
 
 	// TX_COMMIT_KEY This key is used to mark the commit of the transaction
 	TX_COMMIT_KEY = []byte{0x04}
+
+	// TX_ROLLBACK_KEY This key is used to mark the rollback of the transaction
+	TX_ROLLBACK_KEY = []byte{0x15}
+
+	// TX_BEGIN_KEY This key is used to mark the begin of the transaction
+	TX_BEGIN_KEY = []byte{0x12}
 )
 
 var (
