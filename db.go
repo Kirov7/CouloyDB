@@ -63,6 +63,10 @@ func NewCouloyDB(opt Options) (*DB, error) {
 		flock:    fl,
 	}
 
+	if opt.EnableLuaInterpreter {
+		db.initLuaInterpreter()
+	}
+
 	db.initOracle()
 	// load merge file dir
 	if err := db.loadMergeFiles(); err != nil {
