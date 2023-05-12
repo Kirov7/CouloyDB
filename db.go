@@ -424,15 +424,10 @@ func (db *DB) loadIndex(fids []int) error {
 	}
 
 	updateIndex := func(key []byte, typ data.LogRecordType, pos *data.LogPos) {
-		var ok bool
 		if typ == data.LogRecordDeleted {
-			ok = db.memTable.Del(key)
+			db.memTable.Del(key)
 		} else {
-			ok = db.memTable.Put(key, pos)
-		}
-		if !ok {
-			panic("update memTable failed at update")
-			//return ErrUpdateIndexFailed
+			db.memTable.Put(key, pos)
 		}
 	}
 
@@ -467,11 +462,13 @@ func (db *DB) loadIndex(fids []int) error {
 				// if not in tx, update memIndex directly
 				updateIndex(realKey, logRecord.Type, logRecordPos)
 			} else {
-				// if the tx has finished, update to memIndex
-				if logRecord.Type == data.LogRecordTxnCommit {
+
+				if logRecord.Type == data.LogRecordTxnBegin {
+					// if "begin" do nothing
+				} else if logRecord.Type == data.LogRecordTxnCommit {
+					// if the tx has finished, update to memIndex
 					for _, txRecord := range txRecords[txId] {
 						updateIndex(txRecord.Record.Key, txRecord.Record.Type, txRecord.Pos)
-
 					}
 					delete(txRecords, txId)
 				} else if logRecord.Type == data.LogRecordTxnRollback {
@@ -498,7 +495,7 @@ func (db *DB) loadIndex(fids []int) error {
 	return nil
 }
 
-//func (db DB) loadTxFile() error {
+// func (db DB) loadTxFile() error {
 //	fileName := filepath.Join(db.options.DirPath, public.TxIDFileName)
 //	if _, err := os.Stat(fileName); os.IsNotExist(err) {
 //		return nil
@@ -515,7 +512,7 @@ func (db *DB) loadIndex(fids []int) error {
 //	db.txId = txID
 //
 //	return os.Remove(fileName)
-//}
+// }
 
 func (db *DB) getValueByPos(pos *data.LogPos) ([]byte, error) {
 	var dataFile *data.DataFile

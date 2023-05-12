@@ -28,7 +28,7 @@ type WriteBatchOptions struct {
 
 func DefaultOptions() Options {
 	return Options{
-		DirPath:      os.TempDir(),
+		DirPath:      os.TempDir() + "/couloy",
 		DataFileSize: 256 * 1024 * 1024, // 256MB
 		IndexType:    meta.Btree,
 		SyncWrites:   true,
