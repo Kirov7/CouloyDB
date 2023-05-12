@@ -14,23 +14,25 @@ type oracle struct {
 	txId int64
 
 	activeTxnHeap int64Heap
-	commitedTxns  []*txn
+	commitedTxns  []*Txn
 }
 
 func (db *DB) initOracle() *oracle {
-
-	return &oracle{
-		mu:            new(sync.RWMutex),
+	o := &oracle{
+		mu:            &sync.RWMutex{},
 		txId:          time.Now().UnixNano(),
 		activeTxnHeap: int64Heap{},
-		commitedTxns:  make([]*txn, 0),
+		commitedTxns:  make([]*Txn, 0),
 	}
+	db.oracle = o
+	return o
 }
 
-func (o *oracle) hasConflict(txn *txn) bool {
+func (o *oracle) hasConflict(txn *Txn) bool {
 	if len(txn.pendingWrites) == 0 {
 		return false
 	}
+
 	// go through all the old transactions looking for conflicts
 	for _, committedTxn := range o.commitedTxns {
 		if committedTxn.commitTs <= txn.startTs {
@@ -48,14 +50,16 @@ func (o *oracle) hasConflict(txn *txn) bool {
 	return false
 }
 
-func (o *oracle) newCommit(txn *txn) {
+func (o *oracle) newCommit(txn *Txn) {
+	// o.mu.Lock()
+	// defer o.mu.Unlock()
 	o.cleanupCommitTxn()
 	txn.commitTs = o.GetTxId()
 	o.commitedTxns = append(o.commitedTxns, txn)
 	o.removeActiveTxn(txn.startTs)
 }
 
-func (o *oracle) newBegin(txn *txn) {
+func (o *oracle) newBegin(txn *Txn) {
 	txn.startTs = txn.db.oracle.GetTxId()
 	o.addActiveTxn(txn.startTs)
 }
@@ -70,8 +74,7 @@ func (o *oracle) cleanupCommitTxn() {
 	if err != nil {
 		return
 	}
-	o.mu.Lock()
-	defer o.mu.Unlock()
+
 	tmp := o.commitedTxns[:0]
 	for _, txn := range o.commitedTxns {
 		if txn.commitTs <= startTs {
@@ -83,15 +86,13 @@ func (o *oracle) cleanupCommitTxn() {
 }
 
 func (o *oracle) addActiveTxn(startTs int64) {
-	o.mu.Lock()
+
 	heap.Push(&o.activeTxnHeap, startTs)
-	defer o.mu.Unlock()
 }
 
 // peek Find the active transaction with the smallest start timestamp
 func (o *oracle) peekActiveTxn() (int64, error) {
-	o.mu.RUnlock()
-	defer o.mu.RUnlock()
+
 	if o.activeTxnHeap.Len() == 0 {
 		return 0, public.ErrHeapEmpty
 	}
@@ -116,7 +117,7 @@ func (o *oracle) removeActiveTxn(x int64) bool {
 	return true
 }
 
-type txn struct {
+type Txn struct {
 	readOnly bool
 	db       *DB
 	startTs  int64
@@ -130,20 +131,21 @@ type pendingWrite struct {
 	*data.LogPos
 }
 
-func (db *DB) RWTransaction(retryOnErr bool, fn func(txn *txn) error) error {
+func (db *DB) RWTransaction(retryOnErr bool, fn func(txn *Txn) error) error {
 	for {
-		tx := &txn{
-			readOnly: false,
-			db:       db,
+		tx := &Txn{
+			readOnly:      false,
+			db:            db,
+			pendingWrites: make(map[string]pendingWrite),
 		}
 
-		tx.Begin()
+		tx.begin()
 		err := fn(tx)
 		if err != nil {
-			tx.Rollback()
+			tx.rollback()
 			return err
 		}
-		err = tx.Commit()
+		err = tx.commit()
 		if err == nil {
 			return nil
 		}
@@ -155,7 +157,7 @@ func (db *DB) RWTransaction(retryOnErr bool, fn func(txn *txn) error) error {
 	}
 }
 
-func (txn *txn) Begin() {
+func (txn *Txn) begin() {
 	txn.startTs = txn.db.oracle.GetTxId()
 
 	logRecord := &data.LogRecord{
@@ -165,8 +167,10 @@ func (txn *txn) Begin() {
 	_, _ = txn.db.appendLogRecordWithLock(logRecord)
 }
 
-func (txn *txn) Commit() error {
+func (txn *Txn) commit() error {
 	// check whether data conflicts exist
+	txn.db.oracle.mu.Lock()
+	defer txn.db.oracle.mu.Unlock()
 	if !txn.db.oracle.hasConflict(txn) {
 		logRecord := &data.LogRecord{
 			Key:  encodeKeyWithTxId(public.TX_COMMIT_KEY, txn.startTs),
@@ -190,11 +194,11 @@ func (txn *txn) Commit() error {
 	}
 
 	// if there has a conflict, roll back
-	txn.Rollback()
+	txn.rollback()
 	return public.ErrTransactionConflict
 }
 
-func (txn *txn) Rollback() {
+func (txn *Txn) rollback() {
 	logRecord := &data.LogRecord{
 		Key:  encodeKeyWithTxId(public.TX_ROLLBACK_KEY, txn.startTs),
 		Type: data.LogRecordTxnRollback,
@@ -202,18 +206,21 @@ func (txn *txn) Rollback() {
 	_, _ = txn.db.appendLogRecordWithLock(logRecord)
 }
 
-func (txn *txn) Get(key []byte) ([]byte, error) {
+func (txn *Txn) Get(key []byte) ([]byte, error) {
 	if pos, ok := txn.pendingWrites[string(key)]; ok {
-		v, err := txn.db.getValueByPos(pos.LogPos)
-		if err != nil {
-			return nil, err
+		if pos.typ != data.LogRecordDeleted {
+			v, err := txn.db.getValueByPos(pos.LogPos)
+			if err != nil {
+				return nil, err
+			}
+			return v, nil
 		}
-		return v, nil
+		return nil, public.ErrKeyNotFound
 	}
 	return txn.db.Get(key)
 }
 
-func (txn *txn) Put(key []byte, value []byte) error {
+func (txn *Txn) Put(key []byte, value []byte) error {
 	logRecord := &data.LogRecord{
 		Key:   encodeKeyWithTxId(key, txn.startTs),
 		Value: value,
@@ -227,7 +234,7 @@ func (txn *txn) Put(key []byte, value []byte) error {
 	return nil
 }
 
-func (txn *txn) Del(key []byte) error {
+func (txn *Txn) Del(key []byte) error {
 	logRecord := &data.LogRecord{
 		Key:  encodeKeyWithTxId(key, txn.startTs),
 		Type: data.LogRecordDeleted,
