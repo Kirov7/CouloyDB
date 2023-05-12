@@ -78,10 +78,6 @@ func TestCouloyDB(t *testing.T) {
 ```
 `Transaction usage example`
 ```go
-// Please note that Couloy's transaction follows the Read Committed isolation level, and is a happy transaction model.
-// It follows the first-commit-win principle, which means that when a transaction conflicts, it will roll back and return an error.
-// You can set whether to automatically retry through the first input parameter of RWTransaction，or catch errors to handle conflicts yourself.
-// And you should know RC level can avoid the occurrence of dirty writes and dirty reads, but cannot avoid unrepeatable reads, phantom reads, write skew。
 func TestTxn(t *testing.T) {
 	conf := couloy.DefaultOptions()
 	db, err := couloy.NewCouloyDB(conf)
@@ -110,6 +106,11 @@ func TestTxn(t *testing.T) {
 	}
 }
 ```
+> Please note that Couloy's transaction follows the Read Committed isolation level, and is a happy transaction model.<br>
+ It follows the first-commit-win principle, which means that when a transaction conflicts, it will roll back and return an error.<br>
+ You can set whether to automatically retry through the first input parameter of RWTransaction，or catch errors to handle conflicts yourself.<br>
+ And you should know RC level can avoid the occurrence of dirty writes and dirty reads, but cannot avoid unrepeatable reads, phantom reads, write skew.<br>
+
 ### 🏁 Fast start: Kuloy
 
 You can download executable files directly or compile through source code:
