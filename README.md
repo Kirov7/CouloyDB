@@ -97,6 +97,7 @@ func TestTxn(t *testing.T) {
 		if err != nil {
 			return err
 		}
+		fmt.Println(v)
 		return nil
 	}
 	
