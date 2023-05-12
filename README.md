@@ -27,7 +27,7 @@ go get github.com/Kirov7/CouloyDB
 ```
 
 Use CouloyDB in your project:
-
+`Basic usage example`
 ```go
 func TestCouloyDB(t *testing.T) {
 	conf := couloy.DefaultOptions()
@@ -76,7 +76,37 @@ func TestCouloyDB(t *testing.T) {
 	}
 }
 ```
-
+`Transaction usage example`
+```go
+// Please note that the transaction follows the Read Committed (RC) isolation level, which can avoid the occurrence of dirty writes and dirty reads, but cannot avoid the occurrence of unrepeatable reads, phantom reads, write skew
+func TestTxn(t *testing.T) {
+	conf := couloy.DefaultOptions()
+	db, err := couloy.NewCouloyDB(conf)
+	if err != nil {
+		log.Fatal(err)
+	}
+	
+	key := []byte("first key")
+	value := []byte("first value")
+	
+	txAction := func(txn *couloy.Txn) error {
+		err := txn.Put(key, value)
+		if err != nil {
+			return err
+		}
+		v, err := txn.Get(key)
+		if err != nil {
+			return err
+		}
+		return nil
+	}
+	
+	// the first parameter passed in is used to determine whether to automatically retry when this transaction conflicts
+	if err := db.RWTransaction(false, txAction); err != nil {
+		log.Fatal(err)
+	}
+}
+```
 ### 🏁 Fast start: Kuloy
 
 You can download executable files directly or compile through source code:
