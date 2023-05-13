@@ -30,6 +30,7 @@ type DB struct {
 	flock        *flock.Flock
 	bytesWrite   uint64
 	mergeChan    chan struct{}
+	mergeDone    chan error
 	L            *lua.LState
 	oracle       *oracle
 }
@@ -56,11 +57,13 @@ func NewCouloyDB(opt Options) (*DB, error) {
 
 	// Init DB
 	db := &DB{
-		options:  opt,
-		oldFile:  make(map[uint32]*data.DataFile),
-		memTable: meta.NewMemTable(opt.IndexType),
-		mu:       new(sync.RWMutex),
-		flock:    fl,
+		options:   opt,
+		oldFile:   make(map[uint32]*data.DataFile),
+		memTable:  meta.NewMemTable(opt.IndexType),
+		mu:        new(sync.RWMutex),
+		mergeChan: make(chan struct{}),
+		mergeDone: make(chan error),
+		flock:     fl,
 	}
 
 	if opt.EnableLuaInterpreter {
@@ -265,8 +268,7 @@ func (db *DB) mergeWorker() {
 	for {
 		select {
 		case <-db.mergeChan:
-			_ = db.Merge()
-
+			db.mergeDone <- db.Merge()
 			if needTicker {
 				mergeTicker.Reset(mergeInterval)
 			}
