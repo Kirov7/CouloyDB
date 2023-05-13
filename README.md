@@ -184,6 +184,7 @@ You can run the following command to view the functions of all configuration ite
 The Kuloy service currently supports some operations of the String type in Redis, as well as some general operations.
 
 You can use Kuloy as you would normally use Redis (only for currently supported operations, of course).
+Use the go-redis client demonstration here
 
 ```sh
 go get github.com/go-redis/redis/v8
