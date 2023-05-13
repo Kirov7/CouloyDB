@@ -116,17 +116,23 @@ func (bi *btreeIterator) Rewind() {
 	bi.currentIndex = 0
 }
 
-func (bi *btreeIterator) Seek(key []byte) {
+func (bi *btreeIterator) Seek(key []byte) bool {
+	index := 0
 	if bi.reverse {
-		bi.currentIndex = sort.Search(len(bi.values), func(i int) bool {
+		index = sort.Search(len(bi.values), func(i int) bool {
 			return bytes.Compare(bi.values[i].Key, key) <= 0
 		})
 	} else {
-		bi.currentIndex = sort.Search(len(bi.values), func(i int) bool {
+		index = sort.Search(len(bi.values), func(i int) bool {
 			return bytes.Compare(bi.values[i].Key, key) >= 0
 		})
 	}
-
+	if index < 0 {
+		return false
+	} else {
+		bi.currentIndex = index
+		return true
+	}
 }
 
 func (bi *btreeIterator) Next() {
