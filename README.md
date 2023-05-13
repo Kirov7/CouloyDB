@@ -27,7 +27,7 @@ go get github.com/Kirov7/CouloyDB
 ```
 
 Use CouloyDB in your project:
-
+`Basic usage example`
 ```go
 func TestCouloyDB(t *testing.T) {
 	conf := couloy.DefaultOptions()
@@ -76,6 +76,41 @@ func TestCouloyDB(t *testing.T) {
 	}
 }
 ```
+`Transaction usage example`
+```go
+func TestTxn(t *testing.T) {
+	conf := couloy.DefaultOptions()
+	db, err := couloy.NewCouloyDB(conf)
+	if err != nil {
+		log.Fatal(err)
+	}
+	
+	key := []byte("first key")
+	value := []byte("first value")
+	
+	txAction := func(txn *couloy.Txn) error {
+		err := txn.Put(key, value)
+		if err != nil {
+			return err
+		}
+		v, err := txn.Get(key)
+		if err != nil {
+			return err
+		}
+		fmt.Println(v)
+		return nil
+	}
+	
+	// the first parameter passed in is used to determine whether to automatically retry when this transaction conflicts
+	if err := db.RWTransaction(false, txAction); err != nil {
+		log.Fatal(err)
+	}
+}
+```
+> Please note that Couloy's transaction follows the Read Committed isolation level, and is a happy transaction model.<br>
+ It follows the first-commit-win principle, which means that when a transaction conflicts, it will roll back and return an error.<br>
+ You can set whether to automatically retry through the first input parameter of RWTransaction，or catch errors to handle conflicts yourself.<br>
+ And you should know RC level can avoid the occurrence of dirty writes and dirty reads, but cannot avoid unrepeatable reads, phantom reads, write skew.<br>
 
 ### 🏁 Fast start: Kuloy
 
@@ -149,6 +184,7 @@ You can run the following command to view the functions of all configuration ite
 The Kuloy service currently supports some operations of the String type in Redis, as well as some general operations.
 
 You can use Kuloy as you would normally use Redis (only for currently supported operations, of course).
+Use the go-redis client demonstration here
 
 ```sh
 go get github.com/go-redis/redis/v8
@@ -199,11 +235,11 @@ func TestKuloy(t *testing.T) {
 
 ## 🔮 What will I do next?
 
-- [x] Implement batch write with transaction semantics.
+- [x] Implement batch write and basic transaction functions [ now, CouloyDB supports the RC transaction isolation level ].
 - [ ] Optimize hintfile storage structure to support the memtable build faster (may use gob).
 - [ ] Increased use of flatbuffers build options to support faster reading speed.
 - [x] Use mmap to read data file that on disk. [ however, the official mmap library is not optimized enough and needs to be further optimized ]
-- [ ] Embedded lua script interpreter to support the execution of operations with complex logic.
+- [x] Embedded lua script interpreter to support the execution of operations with complex logic [ currently implemented on CouloyDB, Kuloy still does not support ].
 - [x] Extend protocol support for Redis to act as a KV storage server in the network. [ has completed the basic implementation of Kuloy ]
 - [ ] Extend to build complex data structures with the same interface as Redis, such as List, Hash, Set, ZSet, Bitmap, etc.
 - [x] Extend easy-to-use distributed solution (may support both gossip and raft protocols for different usage scenarios) [ has supported gossip ]

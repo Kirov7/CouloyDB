@@ -42,7 +42,7 @@ func NewMemTable(typ MemTableType) MemTable {
 // Iterator Generic index iterator interface
 type Iterator interface {
 	Rewind()
-	Seek(key []byte)
+	Seek(key []byte) bool
 	Next()
 	Valid() bool
 	Key() []byte
