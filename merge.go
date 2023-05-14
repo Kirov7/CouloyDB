@@ -11,8 +11,13 @@ import (
 	"strconv"
 )
 
-// Merge Clear invalid data and generate the hint file
 func (db *DB) Merge() error {
+	db.mergeChan <- struct{}{}
+	return <-db.mergeDone
+}
+
+// Merge Clear invalid data and generate the hint file
+func (db *DB) merge() error {
 	if db.activityFile == nil {
 		return nil
 	}
