@@ -2,28 +2,27 @@ package meta
 
 import (
 	"bytes"
-	"fmt"
 	"github.com/Kirov7/CouloyDB/data"
 	"sort"
 	"sync"
 )
 
 type HashMap struct {
-	sm *sync.Map
+	hmap *sync.Map
 }
 
 func NewHashMap() *HashMap {
-	return &HashMap{sm: &sync.Map{}}
+	return &HashMap{hmap: &sync.Map{}}
 }
 
 func (h *HashMap) Put(key []byte, pos *data.LogPos) bool {
-	_, flag := h.sm.Load(string(key))
-	h.sm.Store(string(key), pos)
+	_, flag := h.hmap.Load(string(key))
+	h.hmap.Store(string(key), pos)
 	return flag
 }
 
 func (h *HashMap) Get(key []byte) *data.LogPos {
-	value, ok := h.sm.Load(string(key))
+	value, ok := h.hmap.Load(string(key))
 	if ok {
 		return value.(*data.LogPos)
 	}
@@ -31,28 +30,28 @@ func (h *HashMap) Get(key []byte) *data.LogPos {
 }
 
 func (h *HashMap) Del(key []byte) bool {
-	_, ok := h.sm.Load(string(key))
+	_, ok := h.hmap.Load(string(key))
 	if ok {
-		h.sm.Delete(string(key))
+		h.hmap.Delete(string(key))
 	}
 	return ok
 }
 
 func (h *HashMap) Iterator(reverse bool) Iterator {
 	isEmpty := true
-	h.sm.Range(func(key, value interface{}) bool {
+	h.hmap.Range(func(key, value interface{}) bool {
 		isEmpty = false
 		return false
 	})
 	if isEmpty {
 		return nil
 	}
-	return newHashMapIterator(h.sm, reverse)
+	return newHashMapIterator(h, reverse)
 }
 
 func (h *HashMap) Count() int {
 	count := 0
-	h.sm.Range(func(key, value any) bool {
+	h.hmap.Range(func(key, value any) bool {
 		count++
 		return true
 	})
@@ -62,30 +61,32 @@ func (h *HashMap) Count() int {
 type HashMapIterator struct {
 	currentIndex int
 	reverse      bool
-	values       []*Item
+	keys         [][]byte
+
+	hmap *HashMap
 }
 
-func newHashMapIterator(m *sync.Map, reverse bool) *HashMapIterator {
-	values := make([]*Item, 0)
-	m.Range(func(key, value any) bool {
-		values = append(values, &Item{Key: []byte(key.(string)), Pos: value.(*data.LogPos)})
+func newHashMapIterator(m *HashMap, reverse bool) *HashMapIterator {
+	keys := make([][]byte, 0)
+	m.hmap.Range(func(key, value any) bool {
+		keys = append(keys, []byte(key.(string)))
 		return true
 	})
 
 	if reverse {
-		sort.Slice(values, func(i, j int) bool {
-			return bytes.Compare(values[i].Key, values[j].Key) > 0
+		sort.Slice(keys, func(i, j int) bool {
+			return bytes.Compare(keys[i], keys[j]) > 0
 		})
 	} else {
-		sort.Slice(values, func(i, j int) bool {
-			return bytes.Compare(values[i].Key, values[j].Key) < 0
+		sort.Slice(keys, func(i, j int) bool {
+			return bytes.Compare(keys[i], keys[j]) < 0
 		})
 	}
 
 	return &HashMapIterator{
 		currentIndex: 0,
 		reverse:      reverse,
-		values:       values,
+		keys:         keys,
 	}
 }
 
@@ -96,17 +97,16 @@ func (hi *HashMapIterator) Rewind() {
 func (hi *HashMapIterator) Seek(key []byte) bool {
 	index := 0
 	if hi.reverse {
-		index = sort.Search(len(hi.values), func(i int) bool {
-			return bytes.Compare(hi.values[i].Key, key) <= 0
+		index = sort.Search(len(hi.keys), func(i int) bool {
+			return bytes.Compare(hi.keys[i], key) <= 0
 		})
 	} else {
-		index = sort.Search(len(hi.values), func(i int) bool {
-			return bytes.Compare(hi.values[i].Key, key) >= 0
+		index = sort.Search(len(hi.keys), func(i int) bool {
+			return bytes.Compare(hi.keys[i], key) >= 0
 		})
 	}
-	fmt.Println("index:", index)
-	fmt.Println(len(hi.values))
-	if index < 0 || index >= len(hi.values) {
+
+	if index < 0 || index >= len(hi.keys) {
 		return false
 	}
 	hi.currentIndex = index
@@ -118,17 +118,17 @@ func (hi *HashMapIterator) Next() {
 }
 
 func (hi *HashMapIterator) Valid() bool {
-	return hi.currentIndex < len(hi.values)
+	return hi.currentIndex < len(hi.keys)
 }
 
 func (hi *HashMapIterator) Key() []byte {
-	return hi.values[hi.currentIndex].Key
+	return hi.keys[hi.currentIndex]
 }
 
 func (hi *HashMapIterator) Value() *data.LogPos {
-	return hi.values[hi.currentIndex].Pos
+	return hi.hmap.Get(hi.keys[hi.currentIndex])
 }
 
 func (hi *HashMapIterator) Close() {
-	hi.values = nil
+	hi.keys = nil
 }

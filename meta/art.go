@@ -54,86 +54,122 @@ func (a *AdaptiveRadixTree) Count() int {
 func (a *AdaptiveRadixTree) Iterator(reverse bool) Iterator {
 	a.lock.RLock()
 	defer a.lock.Unlock()
-	return newArtIterator(a.tree, reverse)
+	return newArtIterator(a, reverse)
 }
 
 type artIterator struct {
 	currentIndex int
 	reverse      bool
-	values       []*Item
+	keys         [][]byte
+
+	art      *AdaptiveRadixTree
+	iterator art.Iterator
+	currItem Item
 }
 
-func newArtIterator(tree art.Tree, reverse bool) *artIterator {
-	var idx int
-
-	// store all data to this slice
-	if reverse {
-		idx = tree.Size() - 1
+func newArtIterator(artree *AdaptiveRadixTree, reverse bool) *artIterator {
+	if !reverse {
+		return &artIterator{
+			reverse:  reverse,
+			art:      artree,
+			iterator: artree.tree.Iterator(),
+		}
 	}
 
-	values := make([]*Item, tree.Size())
+	// store all data to this slice
+	idx := artree.tree.Size() - 1
+
+	keys := make([][]byte, artree.Count())
 	saveValues := func(node art.Node) bool {
-		item := &Item{
-			Key: node.Key(),
-			Pos: node.Value().(*data.LogPos),
-		}
-		values[idx] = item
-		if reverse {
-			idx--
-		} else {
-			idx++
-		}
+		keys[idx] = node.Key()
+		idx--
 		return true
 	}
 
-	tree.ForEach(saveValues)
-
+	artree.tree.ForEach(saveValues)
 	return &artIterator{
 		currentIndex: 0,
 		reverse:      reverse,
-		values:       values,
+		keys:         keys,
 	}
 }
 
-func (bi *artIterator) Rewind() {
-	bi.currentIndex = 0
+func (ai *artIterator) Rewind() {
+	if !ai.reverse {
+		ai.iterator = ai.art.tree.Iterator()
+		return
+	}
+	ai.currentIndex = 0
 }
 
-func (bi *artIterator) Seek(key []byte) bool {
+func (ai *artIterator) Seek(key []byte) bool {
+	if !ai.reverse {
+		if v := ai.art.Get(key); v != nil {
+			ai.currItem = Item{
+				Key: key,
+				Pos: v,
+			}
+			return true
+		}
+		return false
+	}
+
 	index := 0
-	if bi.reverse {
-		index = sort.Search(len(bi.values), func(i int) bool {
-			return bytes.Compare(bi.values[i].Key, key) <= 0
+	if ai.reverse {
+		index = sort.Search(len(ai.keys), func(i int) bool {
+			return bytes.Compare(ai.keys[i], key) <= 0
 		})
 	} else {
-		index = sort.Search(len(bi.values), func(i int) bool {
-			return bytes.Compare(bi.values[i].Key, key) >= 0
+		index = sort.Search(len(ai.keys), func(i int) bool {
+			return bytes.Compare(ai.keys[i], key) >= 0
 		})
 	}
 	if index < 0 {
 		return false
 	} else {
-		bi.currentIndex = index
+		ai.currentIndex = index
 		return true
 	}
 }
 
-func (bi *artIterator) Next() {
-	bi.currentIndex += 1
+func (ai *artIterator) Next() {
+	if !ai.reverse {
+		next, _ := ai.iterator.Next()
+		ai.currItem = Item{
+			Key: next.Key(),
+			Pos: next.Value().(*data.LogPos),
+		}
+		return
+	}
+
+	ai.currentIndex += 1
 }
 
-func (bi *artIterator) Valid() bool {
-	return bi.currentIndex < len(bi.values)
+func (ai *artIterator) Valid() bool {
+	if !ai.reverse {
+		return ai.iterator.HasNext()
+	}
+
+	return ai.currentIndex < len(ai.keys)
 }
 
-func (bi *artIterator) Key() []byte {
-	return bi.values[bi.currentIndex].Key
+func (ai *artIterator) Key() []byte {
+	if !ai.reverse {
+		return ai.currItem.Key
+	}
+
+	return ai.keys[ai.currentIndex]
 }
 
-func (bi *artIterator) Value() *data.LogPos {
-	return bi.values[bi.currentIndex].Pos
+func (ai *artIterator) Value() *data.LogPos {
+	if !ai.reverse {
+		return ai.currItem.Pos
+	}
+
+	return ai.art.Get(ai.keys[ai.currentIndex])
 }
 
-func (bi *artIterator) Close() {
-	bi.values = nil
+func (ai *artIterator) Close() {
+	ai.art = nil
+	ai.keys = nil
 }

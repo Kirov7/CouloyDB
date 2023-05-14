@@ -80,35 +80,38 @@ func (bt *BTree) Iterator(reverse bool) Iterator {
 	}
 	bt.lock.RLock()
 	defer bt.lock.RUnlock()
-	return newBtreeIterator(bt.tree, reverse)
+	return newBtreeIterator(bt, reverse)
 }
 
 type btreeIterator struct {
 	currentIndex int
 	reverse      bool
-	values       []*Item
+	keys         [][]byte
+
+	tree *BTree
 }
 
-func newBtreeIterator(tree *btree.BTree, reverse bool) *btreeIterator {
+func newBtreeIterator(bt *BTree, reverse bool) *btreeIterator {
 	var idx int
-	values := make([]*Item, tree.Len())
+	keys := make([][]byte, bt.Count())
 
 	// store all data to this slice
 	saveValuesFunc := func(it btree.Item) bool {
-		values[idx] = it.(*Item)
+		keys[idx] = it.(*Item).Key
 		idx++
 		return true
 	}
 	if reverse {
-		tree.Descend(saveValuesFunc)
+		bt.tree.Descend(saveValuesFunc)
 	} else {
-		tree.Ascend(saveValuesFunc)
+		bt.tree.Ascend(saveValuesFunc)
 	}
 
 	return &btreeIterator{
 		currentIndex: 0,
 		reverse:      reverse,
-		values:       values,
+		keys:         keys,
+		tree:         bt,
 	}
 }
 
@@ -119,12 +122,12 @@ func (bi *btreeIterator) Rewind() {
 func (bi *btreeIterator) Seek(key []byte) bool {
 	index := 0
 	if bi.reverse {
-		index = sort.Search(len(bi.values), func(i int) bool {
-			return bytes.Compare(bi.values[i].Key, key) <= 0
+		index = sort.Search(len(bi.keys), func(i int) bool {
+			return bytes.Compare(bi.keys[i], key) <= 0
 		})
 	} else {
-		index = sort.Search(len(bi.values), func(i int) bool {
-			return bytes.Compare(bi.values[i].Key, key) >= 0
+		index = sort.Search(len(bi.keys), func(i int) bool {
+			return bytes.Compare(bi.keys[i], key) >= 0
 		})
 	}
 	if index < 0 {
@@ -140,17 +143,17 @@ func (bi *btreeIterator) Next() {
 }
 
 func (bi *btreeIterator) Valid() bool {
-	return bi.currentIndex < len(bi.values)
+	return bi.currentIndex < len(bi.keys)
 }
 
 func (bi *btreeIterator) Key() []byte {
-	return bi.values[bi.currentIndex].Key
+	return bi.keys[bi.currentIndex]
 }
 
 func (bi *btreeIterator) Value() *data.LogPos {
-	return bi.values[bi.currentIndex].Pos
+	return bi.tree.Get(bi.keys[bi.currentIndex])
 }
 
 func (bi *btreeIterator) Close() {
-	bi.values = nil
+	bi.keys = nil
 }
