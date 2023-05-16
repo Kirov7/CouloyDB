@@ -9,17 +9,23 @@ import (
 	"time"
 )
 
+// Global transaction manager
 type oracle struct {
-	mu   *sync.RWMutex
+	mu *sync.RWMutex
+	// Unique transaction ID
 	txId int64
 
+	// A minimum heap for maintaining active transactions
 	activeTxnHeap int64Heap
-	commitedTxns  []*Txn
+	// The committed transaction list used for conflict detection
+	commitedTxns []*Txn
 }
 
 func (db *DB) initOracle() *oracle {
 	o := &oracle{
-		mu:            &sync.RWMutex{},
+		mu: &sync.RWMutex{},
+		// When CouloyDB is started, the current timestamp is taken as the initial transaction id,
+		// and the atoms increment on this basis each time a new transaction id is fetched
 		txId:          time.Now().UnixNano(),
 		activeTxnHeap: int64Heap{},
 		commitedTxns:  make([]*Txn, 0),
@@ -51,16 +57,19 @@ func (o *oracle) hasConflict(txn *Txn) bool {
 }
 
 func (o *oracle) newCommit(txn *Txn) {
-	// o.mu.Lock()
-	// defer o.mu.Unlock()
+	// Clean up overdue submission records
 	o.cleanupCommitTxn()
+	// Get the commit timestamp
 	txn.commitTs = o.GetTxId()
 	o.commitedTxns = append(o.commitedTxns, txn)
+	// Remove this transaction from the active transaction minimum heap
 	o.removeActiveTxn(txn.startTs)
 }
 
 func (o *oracle) newBegin(txn *Txn) {
+	// Get the start timestamp
 	txn.startTs = txn.db.oracle.GetTxId()
+	// Insert this transaction from the active transaction minimum heap
 	o.addActiveTxn(txn.startTs)
 }
 
@@ -70,6 +79,7 @@ func (o *oracle) GetTxId() int64 {
 
 // Clears all transactions whose commitTs is less than the minimum startTs in all active transactions
 func (o *oracle) cleanupCommitTxn() {
+	// Get the minimum transaction timestamp from the active transaction timestamp
 	startTs, err := o.peekActiveTxn()
 	if err != nil {
 		return
@@ -119,10 +129,14 @@ func (o *oracle) removeActiveTxn(x int64) bool {
 
 type Txn struct {
 	readOnly bool
-	db       *DB
-	startTs  int64
+	// Backreference DB instance
+	db *DB
+	// Transaction start time stamp, obtained at begin
+	startTs int64
+	// Transaction commit time stamp, obtained at commit
 	commitTs int64
 
+	// The data written is stored temporarily in pendingWrites instead of memtable
 	pendingWrites map[string]pendingWrite
 }
 
@@ -131,7 +145,10 @@ type pendingWrite struct {
 	*data.LogPos
 }
 
-func (db *DB) RWTransaction(retryOnErr bool, fn func(txn *Txn) error) error {
+// RWTransaction Read/Write transaction
+// if retryOnConflict is true, then the transaction will automatically retry until the transaction commits correctly
+// fn is the real transaction that you want to perform
+func (db *DB) RWTransaction(retryOnConflict bool, fn func(txn *Txn) error) error {
 	for {
 		tx := &Txn{
 			readOnly:      false,
@@ -150,16 +167,19 @@ func (db *DB) RWTransaction(retryOnErr bool, fn func(txn *Txn) error) error {
 			return nil
 		}
 
-		if err == public.ErrTransactionConflict && retryOnErr {
+		if err == public.ErrTransactionConflict && retryOnConflict {
 			continue
 		}
 		return err
 	}
 }
 
+// begin
 func (txn *Txn) begin() {
-	txn.startTs = txn.db.oracle.GetTxId()
+	// the real begin
+	txn.db.oracle.newBegin(txn)
 
+	// write the begin-mark to datafile
 	logRecord := &data.LogRecord{
 		Key:  encodeKeyWithTxId(public.TX_BEGIN_KEY, txn.startTs),
 		Type: data.LogRecordTxnBegin,
@@ -167,11 +187,15 @@ func (txn *Txn) begin() {
 	_, _ = txn.db.appendLogRecordWithLock(logRecord)
 }
 
+// Check for conflicts and finally perform a commit or rollback
 func (txn *Txn) commit() error {
-	// check whether data conflicts exist
+	// because activeTxnHeap and commitedTxns are not concurrent secure locks
+	// so the locks should be obtained first when commit
 	txn.db.oracle.mu.Lock()
 	defer txn.db.oracle.mu.Unlock()
+	// check whether data conflicts exist
 	if !txn.db.oracle.hasConflict(txn) {
+		// write the commit-mark to datafile
 		logRecord := &data.LogRecord{
 			Key:  encodeKeyWithTxId(public.TX_COMMIT_KEY, txn.startTs),
 			Type: data.LogRecordTxnCommit,
@@ -189,16 +213,21 @@ func (txn *Txn) commit() error {
 				txn.db.memTable.Del([]byte(key))
 			}
 		}
+		// the real commit
 		txn.db.oracle.newCommit(txn)
+		//fmt.Printf("=== %d === commit\n", id(txn.startTs))
 		return nil
 	}
 
 	// if there has a conflict, roll back
 	txn.rollback()
+	//fmt.Printf("=== %d === rollback(has conflict)\n", id(txn.startTs))
 	return public.ErrTransactionConflict
 }
 
+// rollback
 func (txn *Txn) rollback() {
+	// write the rollback-mark to datafile
 	logRecord := &data.LogRecord{
 		Key:  encodeKeyWithTxId(public.TX_ROLLBACK_KEY, txn.startTs),
 		Type: data.LogRecordTxnRollback,
@@ -206,8 +235,10 @@ func (txn *Txn) rollback() {
 	_, _ = txn.db.appendLogRecordWithLock(logRecord)
 }
 
+// Get the key first in pendingWrites, if not then in db
 func (txn *Txn) Get(key []byte) ([]byte, error) {
 	if pos, ok := txn.pendingWrites[string(key)]; ok {
+		// If the key is found, check to see if it has been deleted
 		if pos.typ != data.LogRecordDeleted {
 			v, err := txn.db.getValueByPos(pos.LogPos)
 			if err != nil {
@@ -220,6 +251,7 @@ func (txn *Txn) Get(key []byte) ([]byte, error) {
 	return txn.db.Get(key)
 }
 
+// Put writes data to the db, but instead of writing it back to memtable, it writes to pendingWrites first
 func (txn *Txn) Put(key []byte, value []byte) error {
 	logRecord := &data.LogRecord{
 		Key:   encodeKeyWithTxId(key, txn.startTs),
@@ -234,6 +266,7 @@ func (txn *Txn) Put(key []byte, value []byte) error {
 	return nil
 }
 
+// Del delete data to the db, but instead of writing it back to memtable, it writes to pendingWrites first
 func (txn *Txn) Del(key []byte) error {
 	logRecord := &data.LogRecord{
 		Key:  encodeKeyWithTxId(key, txn.startTs),
