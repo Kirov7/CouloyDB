@@ -6,7 +6,6 @@ const (
 	DataFileNameSuffix    = ".cly"
 	HintFileName          = "hint-index"
 	MergeFinishedFileName = "merge-finished"
-	TxIDFileName          = "merge-finished"
 )
 
 var (

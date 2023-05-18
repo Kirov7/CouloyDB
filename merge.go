@@ -178,9 +178,6 @@ func (db *DB) loadMergeFiles() error {
 		if ent.Name() == public.MergeFinishedFileName {
 			MergeFin = true
 		}
-		if ent.Name() == public.TxIDFileName {
-			continue
-		}
 		mergeFileNames = append(mergeFileNames, ent.Name())
 	}
 
@@ -199,7 +196,9 @@ func (db *DB) loadMergeFiles() error {
 	for ; fileId < nonMergeFileId; fileId++ {
 		fileName := data.GetDataFileName(db.options.DirPath, fileId)
 		if _, err := os.Stat(fileName); err != nil {
-			return err
+			if err := os.Remove(fileName); err != nil {
+				return err
+			}
 		}
 	}
 
