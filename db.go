@@ -268,7 +268,7 @@ func (db *DB) mergeWorker() {
 	for {
 		select {
 		case <-db.mergeChan:
-			db.mergeDone <- db.Merge()
+			db.mergeDone <- db.merge()
 			if needTicker {
 				mergeTicker.Reset(mergeInterval)
 			}

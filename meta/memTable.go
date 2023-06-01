@@ -9,6 +9,7 @@ type MemTableType = int8
 const (
 	Btree MemTableType = iota
 	ART
+	HASHMAP
 )
 
 type MemTable interface {
@@ -34,6 +35,8 @@ func NewMemTable(typ MemTableType) MemTable {
 		return NewBTree()
 	case ART:
 		return NewAdaptiveRadixTree()
+	case HASHMAP:
+		return NewHashMap()
 	default:
 		return NewBTree()
 	}
