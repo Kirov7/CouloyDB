@@ -254,4 +254,3 @@ If you have any questions and want to contact me, you can send me an email: craz
 Or join this Tencent WeChat group. I will try my best to solve all the problems<br>
 
 <img src="https://img1.imgtp.com/2023/06/01/nPeJVpCz.png" alt="WeChat.png" style="zoom:20%;" />
-<img src="https://img1.imgtp.com/2023/06/01/nPeJVpCz.png" alt="WeChat.png" style="zoom:50%;" />
