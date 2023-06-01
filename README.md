@@ -248,3 +248,8 @@ func TestKuloy(t *testing.T) {
 - [ ] Add the necessary Rehash functionality.
 
 <br>
+
+## Contact me?
+If you have any questions and want to contact me, you can send me an email: crazyfay@qq.com<br>
+Or join this Tencent WeChat group. I will try my best to solve all the problems<br>
+![WeChat.png](https://img1.imgtp.com/2023/06/01/nPeJVpCz.png)
