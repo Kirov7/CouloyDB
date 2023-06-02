@@ -109,8 +109,6 @@ func (db *DB) Put(key, value []byte) error {
 }
 
 func (db *DB) Get(key []byte) ([]byte, error) {
-	db.mu.RLock()
-	defer db.mu.RUnlock()
 	if len(key) == 0 {
 		return nil, public.ErrKeyIsEmpty
 	}
@@ -279,8 +277,6 @@ func (db *DB) mergeWorker() {
 }
 
 func (db *DB) appendLogRecordWithLock(log *data.LogRecord) (*data.LogPos, error) {
-	db.mu.Lock()
-	defer db.mu.Unlock()
 	return db.appendLogRecord(log)
 }
 

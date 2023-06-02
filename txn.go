@@ -18,7 +18,7 @@ type oracle struct {
 	// A minimum heap for maintaining active transactions
 	activeTxnHeap int64Heap
 	// The committed transaction list used for conflict detection
-	commitedTxns []*Txn
+	committedTxns []*Txn
 }
 
 func (db *DB) initOracle() *oracle {
@@ -28,7 +28,7 @@ func (db *DB) initOracle() *oracle {
 		// and the atoms increment on this basis each time a new transaction id is fetched
 		txId:          time.Now().UnixNano(),
 		activeTxnHeap: int64Heap{},
-		commitedTxns:  make([]*Txn, 0),
+		committedTxns: make([]*Txn, 0),
 	}
 	db.oracle = o
 	return o
@@ -40,7 +40,7 @@ func (o *oracle) hasConflict(txn *Txn) bool {
 	}
 
 	// go through all the old transactions looking for conflicts
-	for _, committedTxn := range o.commitedTxns {
+	for _, committedTxn := range o.committedTxns {
 		if committedTxn.commitTs <= txn.startTs {
 			continue
 		}
@@ -61,9 +61,11 @@ func (o *oracle) newCommit(txn *Txn) {
 	o.cleanupCommitTxn()
 	// Get the commit timestamp
 	txn.commitTs = o.GetTxId()
-	o.commitedTxns = append(o.commitedTxns, txn)
+	o.committedTxns = append(o.committedTxns, txn)
 	// Remove this transaction from the active transaction minimum heap
 	o.removeActiveTxn(txn.startTs)
+
+	txn.unlock()
 }
 
 func (o *oracle) newBegin(txn *Txn) {
@@ -85,14 +87,14 @@ func (o *oracle) cleanupCommitTxn() {
 		return
 	}
 
-	tmp := o.commitedTxns[:0]
-	for _, txn := range o.commitedTxns {
+	tmp := o.committedTxns[:0]
+	for _, txn := range o.committedTxns {
 		if txn.commitTs <= startTs {
 			continue
 		}
 		tmp = append(tmp, txn)
 	}
-	o.commitedTxns = tmp
+	o.committedTxns = tmp
 }
 
 func (o *oracle) addActiveTxn(startTs int64) {
@@ -145,24 +147,41 @@ type pendingWrite struct {
 	*data.LogPos
 }
 
+// ReadOnlyTransaction Read only transaction
+func (db *DB) ReadOnlyTransaction(fn func(txn *Txn) error) error {
+	if fn == nil {
+		return public.ErrTxnFunctionEmpty
+	}
+	txn := newTxn(true, db)
+	txn.begin()
+	if err := fn(txn); err != nil {
+		txn.rollback()
+		return err
+	}
+
+	if err := txn.commit(); err != nil {
+		return err
+	}
+	return nil
+}
+
 // RWTransaction Read/Write transaction
 // if retryOnConflict is true, then the transaction will automatically retry until the transaction commits correctly
 // fn is the real transaction that you want to perform
 func (db *DB) RWTransaction(retryOnConflict bool, fn func(txn *Txn) error) error {
+	if fn == nil {
+		return public.ErrTxnFunctionEmpty
+	}
 	for {
-		tx := &Txn{
-			readOnly:      false,
-			db:            db,
-			pendingWrites: make(map[string]pendingWrite),
-		}
+		txn := newTxn(false, db)
 
-		tx.begin()
-		err := fn(tx)
+		txn.begin()
+		err := fn(txn)
 		if err != nil {
-			tx.rollback()
+			txn.rollback()
 			return err
 		}
-		err = tx.commit()
+		err = txn.commit()
 		if err == nil {
 			return nil
 		}
@@ -174,10 +193,20 @@ func (db *DB) RWTransaction(retryOnConflict bool, fn func(txn *Txn) error) error
 	}
 }
 
+func newTxn(readOnly bool, db *DB) *Txn {
+	return &Txn{
+		readOnly:      readOnly,
+		db:            db,
+		pendingWrites: make(map[string]pendingWrite),
+	}
+}
+
 // begin
 func (txn *Txn) begin() {
 	// the real begin
 	txn.db.oracle.newBegin(txn)
+
+	txn.lock()
 
 	// write the begin-mark to datafile
 	logRecord := &data.LogRecord{
@@ -189,7 +218,7 @@ func (txn *Txn) begin() {
 
 // Check for conflicts and finally perform a commit or rollback
 func (txn *Txn) commit() error {
-	// because activeTxnHeap and commitedTxns are not concurrent secure locks
+	// because activeTxnHeap and committedTxns are not concurrent secure locks
 	// so the locks should be obtained first when commit
 	txn.db.oracle.mu.Lock()
 	defer txn.db.oracle.mu.Unlock()
@@ -233,6 +262,8 @@ func (txn *Txn) rollback() {
 		Type: data.LogRecordTxnRollback,
 	}
 	_, _ = txn.db.appendLogRecordWithLock(logRecord)
+
+	txn.unlock()
 }
 
 // Get the key first in pendingWrites, if not then in db
@@ -278,6 +309,22 @@ func (txn *Txn) Del(key []byte) error {
 	}
 	txn.pendingWrites[string(key)] = pendingWrite{typ: data.LogRecordDeleted, LogPos: pos}
 	return nil
+}
+
+func (txn *Txn) lock() {
+	if txn.readOnly {
+		txn.db.mu.RLock()
+	} else {
+		txn.db.mu.Lock()
+	}
+}
+
+func (txn *Txn) unlock() {
+	if txn.readOnly {
+		txn.db.mu.RUnlock()
+	} else {
+		txn.db.mu.Unlock()
+	}
 }
 
 type int64Heap []int64
