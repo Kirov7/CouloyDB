@@ -9,6 +9,13 @@ import (
 	"time"
 )
 
+type IsolationLevel uint8
+
+const (
+	Read_Committed IsolationLevel = iota
+	Serializable
+)
+
 // Global transaction manager
 type oracle struct {
 	mu *sync.RWMutex
@@ -18,7 +25,7 @@ type oracle struct {
 	// A minimum heap for maintaining active transactions
 	activeTxnHeap int64Heap
 	// The committed transaction list used for conflict detection
-	commitedTxns []*Txn
+	committedTxns []*Txn
 }
 
 func (db *DB) initOracle() *oracle {
@@ -28,7 +35,7 @@ func (db *DB) initOracle() *oracle {
 		// and the atoms increment on this basis each time a new transaction id is fetched
 		txId:          time.Now().UnixNano(),
 		activeTxnHeap: int64Heap{},
-		commitedTxns:  make([]*Txn, 0),
+		committedTxns: make([]*Txn, 0),
 	}
 	db.oracle = o
 	return o
@@ -40,7 +47,7 @@ func (o *oracle) hasConflict(txn *Txn) bool {
 	}
 
 	// go through all the old transactions looking for conflicts
-	for _, committedTxn := range o.commitedTxns {
+	for _, committedTxn := range o.committedTxns {
 		if committedTxn.commitTs <= txn.startTs {
 			continue
 		}
@@ -61,9 +68,13 @@ func (o *oracle) newCommit(txn *Txn) {
 	o.cleanupCommitTxn()
 	// Get the commit timestamp
 	txn.commitTs = o.GetTxId()
-	o.commitedTxns = append(o.commitedTxns, txn)
+	o.committedTxns = append(o.committedTxns, txn)
 	// Remove this transaction from the active transaction minimum heap
 	o.removeActiveTxn(txn.startTs)
+
+	if txn.isolationLevel == Serializable {
+		txn.unlock()
+	}
 }
 
 func (o *oracle) newBegin(txn *Txn) {
@@ -85,14 +96,14 @@ func (o *oracle) cleanupCommitTxn() {
 		return
 	}
 
-	tmp := o.commitedTxns[:0]
-	for _, txn := range o.commitedTxns {
+	tmp := o.committedTxns[:0]
+	for _, txn := range o.committedTxns {
 		if txn.commitTs <= startTs {
 			continue
 		}
 		tmp = append(tmp, txn)
 	}
-	o.commitedTxns = tmp
+	o.committedTxns = tmp
 }
 
 func (o *oracle) addActiveTxn(startTs int64) {
@@ -131,6 +142,8 @@ type Txn struct {
 	readOnly bool
 	// Backreference DB instance
 	db *DB
+	// Isolation level of txn
+	isolationLevel IsolationLevel
 	// Transaction start time stamp, obtained at begin
 	startTs int64
 	// Transaction commit time stamp, obtained at commit
@@ -140,9 +153,37 @@ type Txn struct {
 	pendingWrites map[string]pendingWrite
 }
 
+func NewTxn(readOnly bool, db *DB, isolationLevel IsolationLevel) *Txn {
+	return &Txn{
+		readOnly:       readOnly,
+		db:             db,
+		isolationLevel: isolationLevel,
+		pendingWrites:  make(map[string]pendingWrite),
+	}
+}
+
 type pendingWrite struct {
 	typ data.LogRecordType
 	*data.LogPos
+}
+
+// SerializableTxn serializable transaction
+// For now, the commit of a serializable transaction is unlikely to conflict
+// so no retry is required
+func (db *DB) SerializableTxn(readOnly bool, fn func(txn *Txn) error) error {
+	if fn == nil {
+		return public.ErrTxnFnEmpty
+	}
+	txn := NewTxn(readOnly, db, Serializable)
+	txn.begin()
+	if err := fn(txn); err != nil {
+		txn.rollback()
+		return err
+	}
+	if err := txn.commit(); err != nil {
+		return err
+	}
+	return nil
 }
 
 // RWTransaction Read/Write transaction
@@ -150,11 +191,7 @@ type pendingWrite struct {
 // fn is the real transaction that you want to perform
 func (db *DB) RWTransaction(retryOnConflict bool, fn func(txn *Txn) error) error {
 	for {
-		tx := &Txn{
-			readOnly:      false,
-			db:            db,
-			pendingWrites: make(map[string]pendingWrite),
-		}
+		tx := NewTxn(false, db, Read_Committed)
 
 		tx.begin()
 		err := fn(tx)
@@ -179,6 +216,10 @@ func (txn *Txn) begin() {
 	// the real begin
 	txn.db.oracle.newBegin(txn)
 
+	if txn.isolationLevel == Serializable {
+		txn.lock()
+	}
+
 	// write the begin-mark to datafile
 	logRecord := &data.LogRecord{
 		Key:  encodeKeyWithTxId(public.TX_BEGIN_KEY, txn.startTs),
@@ -189,10 +230,12 @@ func (txn *Txn) begin() {
 
 // Check for conflicts and finally perform a commit or rollback
 func (txn *Txn) commit() error {
-	// because activeTxnHeap and commitedTxns are not concurrent secure locks
+	// because activeTxnHeap and committedTxns are not concurrent secure locks
 	// so the locks should be obtained first when commit
-	txn.db.oracle.mu.Lock()
-	defer txn.db.oracle.mu.Unlock()
+	if txn.isolationLevel == Read_Committed {
+		txn.db.oracle.mu.Lock()
+		defer txn.db.oracle.mu.Unlock()
+	}
 	// check whether data conflicts exist
 	if !txn.db.oracle.hasConflict(txn) {
 		// write the commit-mark to datafile
@@ -233,6 +276,9 @@ func (txn *Txn) rollback() {
 		Type: data.LogRecordTxnRollback,
 	}
 	_, _ = txn.db.appendLogRecordWithLock(logRecord)
+	if txn.isolationLevel == Serializable {
+		txn.unlock()
+	}
 }
 
 // Get the key first in pendingWrites, if not then in db
@@ -278,6 +324,22 @@ func (txn *Txn) Del(key []byte) error {
 	}
 	txn.pendingWrites[string(key)] = pendingWrite{typ: data.LogRecordDeleted, LogPos: pos}
 	return nil
+}
+
+func (txn *Txn) lock() {
+	if txn.readOnly {
+		txn.db.oracle.mu.RLock()
+	} else {
+		txn.db.oracle.mu.Lock()
+	}
+}
+
+func (txn *Txn) unlock() {
+	if txn.readOnly {
+		txn.db.oracle.mu.RUnlock()
+	} else {
+		txn.db.oracle.mu.Unlock()
+	}
 }
 
 type int64Heap []int64
