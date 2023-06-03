@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-func TestDB_SerializableTxn(t *testing.T) {
+func TestDB_SerialTransaction(t *testing.T) {
 	conf := DefaultOptions()
 	db, err := NewCouloyDB(conf)
 	if err != nil {
@@ -63,19 +63,19 @@ func TestDB_SerializableTxn(t *testing.T) {
 
 	wg.Add(1)
 	go func() {
-		_ = db.SerializableTxn(true, readLoop1)
+		_ = db.SerialTransaction(true, readLoop1)
 		wg.Done()
 	}()
 
 	wg.Add(1)
 	go func() {
-		_ = db.SerializableTxn(false, writeLoop2)
+		_ = db.SerialTransaction(false, writeLoop2)
 		wg.Done()
 	}()
 
 	wg.Add(1)
 	go func() {
-		_ = db.SerializableTxn(true, readLoop2)
+		_ = db.SerialTransaction(true, readLoop2)
 		wg.Done()
 	}()
 
@@ -83,7 +83,7 @@ func TestDB_SerializableTxn(t *testing.T) {
 	_ = db.Close()
 }
 
-func TestDB_SerializableTxn_And_RWTransaction(t *testing.T) {
+func TestDB_SerialTransaction_With_RWTransaction(t *testing.T) {
 	conf := DefaultOptions()
 	db, _ := NewCouloyDB(conf)
 
@@ -97,7 +97,6 @@ func TestDB_SerializableTxn_And_RWTransaction(t *testing.T) {
 	}
 
 	writeAciont2 := func(txn *Txn) error {
-		time.Sleep(time.Second) // Ensure the serializable transaction have started executing
 		err := txn.Put([]byte("key"), []byte("world"))
 		if err != nil {
 			return nil
@@ -109,6 +108,7 @@ func TestDB_SerializableTxn_And_RWTransaction(t *testing.T) {
 
 	wg.Add(1)
 	go func() {
+		time.Sleep(100 * time.Millisecond) // Ensure the serializable transaction have started executing
 		err := db.RWTransaction(false, writeAciont1)
 		// Because the serializable transaction has been committed before the RW transaction commits
 		// So this RW transaction will definitely fail to commit due to conflicts
@@ -118,7 +118,7 @@ func TestDB_SerializableTxn_And_RWTransaction(t *testing.T) {
 		wg.Done()
 	}()
 	go func() {
-		_ = db.SerializableTxn(false, writeAciont2)
+		_ = db.SerialTransaction(false, writeAciont2)
 		wg.Done()
 	}()
 

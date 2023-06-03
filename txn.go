@@ -12,7 +12,7 @@ import (
 type IsolationLevel uint8
 
 const (
-	Read_Committed IsolationLevel = iota
+	ReadCommitted IsolationLevel = iota
 	Serializable
 )
 
@@ -153,7 +153,7 @@ type Txn struct {
 	pendingWrites map[string]pendingWrite
 }
 
-func NewTxn(readOnly bool, db *DB, isolationLevel IsolationLevel) *Txn {
+func newTxn(readOnly bool, db *DB, isolationLevel IsolationLevel) *Txn {
 	return &Txn{
 		readOnly:       readOnly,
 		db:             db,
@@ -167,14 +167,14 @@ type pendingWrite struct {
 	*data.LogPos
 }
 
-// SerializableTxn serializable transaction
+// SerialTransaction serializable transaction
 // For now, the commit of a serializable transaction is unlikely to conflict
 // so no retry is required
-func (db *DB) SerializableTxn(readOnly bool, fn func(txn *Txn) error) error {
+func (db *DB) SerialTransaction(readOnly bool, fn func(txn *Txn) error) error {
 	if fn == nil {
 		return public.ErrTxnFnEmpty
 	}
-	txn := NewTxn(readOnly, db, Serializable)
+	txn := newTxn(readOnly, db, Serializable)
 	txn.begin()
 	if err := fn(txn); err != nil {
 		txn.rollback()
@@ -191,7 +191,7 @@ func (db *DB) SerializableTxn(readOnly bool, fn func(txn *Txn) error) error {
 // fn is the real transaction that you want to perform
 func (db *DB) RWTransaction(retryOnConflict bool, fn func(txn *Txn) error) error {
 	for {
-		tx := NewTxn(false, db, Read_Committed)
+		tx := newTxn(false, db, ReadCommitted)
 
 		tx.begin()
 		err := fn(tx)
@@ -232,7 +232,7 @@ func (txn *Txn) begin() {
 func (txn *Txn) commit() error {
 	// because activeTxnHeap and committedTxns are not concurrent secure locks
 	// so the locks should be obtained first when commit
-	if txn.isolationLevel == Read_Committed {
+	if txn.isolationLevel == ReadCommitted {
 		txn.db.oracle.mu.Lock()
 		defer txn.db.oracle.mu.Unlock()
 	}
