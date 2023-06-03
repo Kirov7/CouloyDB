@@ -13,4 +13,5 @@ var (
 	ErrLuaInterpreterDisabled = errors.New("the lua Interpreter is not started, can not support execute lua script")
 	ErrTransactionConflict    = errors.New("transaction concurrency conflict, please try again")
 	ErrHeapEmpty              = errors.New("heap is empty")
+	ErrTxnFnEmpty             = errors.New("the txn fn is empty")
 )
