@@ -3,9 +3,9 @@ package CouloyDB
 import (
 	"bytes"
 	"github.com/Kirov7/CouloyDB/public"
+	"github.com/Kirov7/CouloyDB/public/utils/wait"
 	"log"
 	"strconv"
-	"sync"
 	"testing"
 	"time"
 )
@@ -57,29 +57,29 @@ func TestDB_SerialTransaction(t *testing.T) {
 		return nil
 	}
 
-	wg := sync.WaitGroup{}
+	w := wait.NewWait()
 
 	_ = db.RWTransaction(false, writeLoop1)
 
-	wg.Add(1)
+	w.Add(1)
 	go func() {
 		_ = db.SerialTransaction(true, readLoop1)
-		wg.Done()
+		w.Done()
 	}()
 
-	wg.Add(1)
+	w.Add(1)
 	go func() {
 		_ = db.SerialTransaction(false, writeLoop2)
-		wg.Done()
+		w.Done()
 	}()
 
-	wg.Add(1)
+	w.Add(1)
 	go func() {
 		_ = db.SerialTransaction(true, readLoop2)
-		wg.Done()
+		w.Done()
 	}()
 
-	wg.Wait()
+	w.Wait()
 	_ = db.Close()
 }
 
@@ -104,9 +104,9 @@ func TestDB_SerialTransaction_With_RWTransaction(t *testing.T) {
 		return nil
 	}
 
-	wg := sync.WaitGroup{}
+	w := wait.NewWait()
 
-	wg.Add(1)
+	w.Add(1)
 	go func() {
 		time.Sleep(100 * time.Millisecond) // Ensure the serializable transaction have started executing
 		err := db.RWTransaction(false, writeAciont1)
@@ -115,14 +115,14 @@ func TestDB_SerialTransaction_With_RWTransaction(t *testing.T) {
 		if err != public.ErrTransactionConflict {
 			t.Fail()
 		}
-		wg.Done()
+		w.Done()
 	}()
 	go func() {
 		_ = db.SerialTransaction(false, writeAciont2)
-		wg.Done()
+		w.Done()
 	}()
 
-	wg.Wait()
+	w.Wait()
 	v, _ := db.Get([]byte("key"))
 	if bytes.Compare(v, []byte("world")) != 0 {
 		t.Fail()
