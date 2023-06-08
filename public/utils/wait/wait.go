@@ -10,6 +10,12 @@ type Wait struct {
 	wg sync.WaitGroup
 }
 
+func NewWait() *Wait {
+	return &Wait{
+		wg: sync.WaitGroup{},
+	}
+}
+
 // Add adds delta, which may be negative, to the WaitGroup counter.
 func (w *Wait) Add(delta int) {
 	w.wg.Add(delta)
