@@ -253,4 +253,4 @@ func TestKuloy(t *testing.T) {
 If you have any questions and want to contact me, you can send me an email: crazyfay@qq.com<br>
 Or join this Tencent WeChat group. I will try my best to solve all the problems<br>
 
-<img src="https://img1.imgtp.com/2023/06/01/nPeJVpCz.png" alt="WeChat.png" style="width:20%;" />
+<img src="https://img1.imgtp.com/2023/06/14/hzKZhoBv.png" alt="WeChat.png" style="width:20%;" />
