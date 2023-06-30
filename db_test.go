@@ -1,6 +1,7 @@
 package CouloyDB
 
 import (
+	"fmt"
 	"github.com/Kirov7/CouloyDB/public"
 	"github.com/Kirov7/CouloyDB/public/utils/bytes"
 	"github.com/Kirov7/CouloyDB/public/utils/wait"
@@ -251,4 +252,44 @@ func TestDB_Reboot(t *testing.T) {
 		}(id)
 	}
 	w.Wait()
+}
+
+func TestDB_Fold(t *testing.T) {
+	options := DefaultOptions()
+	options.SetSyncWrites(false)
+	couloyDB, err := NewCouloyDB(options)
+	defer destroyCouloyDB(couloyDB)
+	assert.Nil(t, err)
+	assert.NotNil(t, couloyDB)
+
+	// put some key-value
+	var n = 3
+	for i := 0; i < n; i++ {
+		err = couloyDB.Put([]byte(fmt.Sprintf("key%d", i)), []byte(fmt.Sprintf("value%d", i)))
+		assert.Nil(t, err)
+	}
+
+	// define a map that collects all key-value pairs
+	results := make(map[string]string)
+
+	err = couloyDB.Fold(func(key []byte, value []byte) bool {
+		results[string(key)] = string(value)
+		return true
+	})
+	assert.Nil(t, err)
+
+	// check the result
+	assert.Equal(t, n, len(results))
+
+	// test the early termination feature of the Fold func
+	count := 0
+	err = couloyDB.Fold(func(key []byte, value []byte) bool {
+		count++
+		if count == 2 {
+			return false
+		}
+		return true
+	})
+	assert.Nil(t, err)
+	assert.Equal(t, count, 2)
 }
