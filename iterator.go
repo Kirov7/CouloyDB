@@ -45,8 +45,6 @@ func (it *Iterator) Key() []byte {
 
 func (it *Iterator) Value() ([]byte, error) {
 	logRecordPos := it.IndexIterator.Value()
-	it.db.mu.RLock()
-	defer it.db.mu.RUnlock()
 	return it.db.getValueByPos(logRecordPos)
 
 }

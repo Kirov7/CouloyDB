@@ -109,8 +109,6 @@ func (db *DB) Put(key, value []byte) error {
 }
 
 func (db *DB) Get(key []byte) ([]byte, error) {
-	db.mu.RLock()
-	defer db.mu.RUnlock()
 	if len(key) == 0 {
 		return nil, public.ErrKeyIsEmpty
 	}
@@ -179,9 +177,6 @@ func (db *DB) ListKeys() [][]byte {
 // Fold gets all the keys and executes the function passed in by the user.
 // Terminates the traversal when the function returns false
 func (db *DB) Fold(fn func(key []byte, value []byte) bool) error {
-	db.mu.RLock()
-	defer db.mu.RUnlock()
-
 	iterator := db.memTable.Iterator(false)
 	for iterator.Rewind(); iterator.Valid(); iterator.Next() {
 		value, err := db.getValueByPos(iterator.Value())
