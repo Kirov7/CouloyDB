@@ -141,6 +141,12 @@ func (db *DB) Get(key []byte) ([]byte, error) {
 	if len(key) == 0 {
 		return nil, public.ErrKeyIsEmpty
 	}
+
+	if db.ttl.isExpired(string(key)) {
+		// if the key is expired, just return and don't delete the key now
+		return nil, public.ErrKeyNotFound
+	}
+
 	pos := db.memTable.Get(key)
 	if pos == nil {
 		return nil, public.ErrKeyNotFound
