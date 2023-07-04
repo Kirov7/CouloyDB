@@ -17,7 +17,7 @@ const (
 const (
 	// crc type keySize ValueSize
 	// 4 + 1 + 5 + 5 = 15
-	maxLogRecordHeaderSize = binary.MaxVarintLen32*2 + 5
+	maxLogRecordHeaderSize = binary.MaxVarintLen32*2 + binary.MaxVarintLen64 + 5
 )
 
 type LogRecordHeader struct {
@@ -25,12 +25,14 @@ type LogRecordHeader struct {
 	RecordType LogRecordType
 	KeySize    uint32
 	ValueSize  uint32
+	Expiration int64
 }
 
 type LogRecord struct {
-	Key   []byte
-	Value []byte
-	Type  LogRecordType
+	Key        []byte
+	Value      []byte
+	Type       LogRecordType
+	Expiration int64
 }
 
 // LogPos The location of the data on the disk
@@ -46,9 +48,10 @@ func EncodeLogRecord(log *LogRecord) ([]byte, int64) {
 	// 5th byte store the Type
 	header[4] = log.Type
 	var index = 5
-	// after the 5th byte the data we store is the key and value with varInt
+	// after the 5th byte the data we store is the key, value and the expiration with varInt
 	index += binary.PutVarint(header[index:], int64(len(log.Key)))
 	index += binary.PutVarint(header[index:], int64(len(log.Value)))
+	index += binary.PutVarint(header[index:], log.Expiration)
 
 	var size = index + len(log.Key) + len(log.Value)
 	encBytes := make([]byte, size)
@@ -86,6 +89,10 @@ func DecodeLogRecordHeader(buf []byte) (*LogRecordHeader, int64) {
 	// read the real valueSize
 	valueSize, n := binary.Varint(buf[index:])
 	header.ValueSize = uint32(valueSize)
+	index += n
+
+	expiration, n := binary.Varint(buf[index:])
+	header.Expiration = expiration
 	index += n
 
 	return header, int64(index)

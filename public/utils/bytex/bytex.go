@@ -1,4 +1,4 @@
-package bytes
+package bytex
 
 import (
 	"fmt"
@@ -7,8 +7,8 @@ import (
 
 const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 
-func IntToBytes(x int) []byte {
-	return []byte(fmt.Sprintf("%d", x))
+func GetTestKey(x int) []byte {
+	return []byte(fmt.Sprintf("%09d", x))
 }
 
 func RandomBytes(length int) []byte {

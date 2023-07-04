@@ -6,6 +6,7 @@ import (
 	"github.com/Kirov7/CouloyDB/data"
 	"github.com/Kirov7/CouloyDB/meta"
 	"github.com/Kirov7/CouloyDB/public"
+	"github.com/Kirov7/CouloyDB/public/ds"
 	"github.com/gofrs/flock"
 	lua "github.com/yuin/gopher-lua"
 	"io"
@@ -33,6 +34,7 @@ type DB struct {
 	mergeDone    chan error
 	L            *lua.LState
 	oracle       *oracle
+	ttl          *ttl
 }
 
 func NewCouloyDB(opt Options) (*DB, error) {
@@ -66,6 +68,10 @@ func NewCouloyDB(opt Options) (*DB, error) {
 		flock:     fl,
 	}
 
+	db.ttl = newTTL(func(key string) error {
+		return db.Del([]byte(key))
+	})
+
 	if opt.EnableLuaInterpreter {
 		db.initLuaInterpreter()
 	}
@@ -83,25 +89,46 @@ func NewCouloyDB(opt Options) (*DB, error) {
 
 	go db.mergeWorker()
 
+	go db.ttl.start()
+
 	return db, nil
 }
 
+func (db *DB) PutWithExpiration(key, value []byte, duration time.Duration) error {
+	return db.put(key, value, duration)
+}
+
 func (db *DB) Put(key, value []byte) error {
+	return db.put(key, value, 0)
+}
+
+func (db *DB) put(key, value []byte, duration time.Duration) error {
 	if len(key) == 0 {
 		return public.ErrKeyIsEmpty
 	}
 	if len(key) == 1 && (key[0] < 32 || key[0] == 127) {
 		return public.ErrKeyIsControlChar
 	}
-	logRecord := &data.LogRecord{
-		Key:   encodeKeyWithTxId(key, public.NO_TX_ID),
-		Value: value,
-		Type:  data.LogRecordNormal,
+
+	var expiration int64
+	if duration != 0 {
+		expiration = time.Now().Add(duration).UnixNano()
 	}
+
+	logRecord := &data.LogRecord{
+		Key:        encodeKeyWithTxId(key, public.NO_TX_ID),
+		Value:      value,
+		Type:       data.LogRecordNormal,
+		Expiration: expiration,
+	}
+
 	pos, err := db.appendLogRecordWithLock(logRecord)
 	if err != nil {
 		return err
 	}
+
+	db.ttl.add(ds.NewJob(string(key), time.Unix(0, expiration)))
+
 	if ok := db.memTable.Put(key, pos); !ok {
 		return public.ErrUpdateIndexFailed
 	}
@@ -141,6 +168,8 @@ func (db *DB) Del(key []byte) error {
 	if err != nil {
 		return err
 	}
+
+	db.ttl.del(string(key))
 
 	// Delete key in memory memTable
 	if ok := db.memTable.Del(key); !ok {
@@ -238,6 +267,8 @@ func (db *DB) Close() error {
 			return err
 		}
 	}
+
+	db.ttl.stop()
 	return nil
 }
 
@@ -425,10 +456,14 @@ func (db *DB) loadIndex(fids []int) error {
 		deleteLessThan(fids, nonMergeFileId)
 	}
 
-	updateIndex := func(key []byte, typ data.LogRecordType, pos *data.LogPos) {
-		if typ == data.LogRecordDeleted {
+	expirations := make(map[string]int64)
+
+	updateIndex := func(key []byte, log *data.LogRecord, pos *data.LogPos) {
+		if log.Type == data.LogRecordDeleted {
+			delete(expirations, string(key))
 			db.memTable.Del(key)
 		} else {
+			expirations[string(key)] = log.Expiration
 			db.memTable.Put(key, pos)
 		}
 	}
@@ -462,7 +497,7 @@ func (db *DB) loadIndex(fids []int) error {
 			realKey, txId := parseLogRecordKey(logRecord.Key)
 			if txId == public.NO_TX_ID {
 				// if not in tx, update memIndex directly
-				updateIndex(realKey, logRecord.Type, logRecordPos)
+				updateIndex(realKey, logRecord, logRecordPos)
 			} else {
 
 				if logRecord.Type == data.LogRecordTxnBegin {
@@ -470,7 +505,7 @@ func (db *DB) loadIndex(fids []int) error {
 				} else if logRecord.Type == data.LogRecordTxnCommit {
 					// if the tx has finished, update to memIndex
 					for _, txRecord := range txRecords[txId] {
-						updateIndex(txRecord.Record.Key, txRecord.Record.Type, txRecord.Pos)
+						updateIndex(txRecord.Record.Key, txRecord.Record, txRecord.Pos)
 					}
 					delete(txRecords, txId)
 				} else if logRecord.Type == data.LogRecordTxnRollback {
@@ -494,6 +529,22 @@ func (db *DB) loadIndex(fids []int) error {
 			db.activityFile.WriteOff = offset
 		}
 	}
+
+	// update ttl according to the current memtable
+	for key, expiration := range expirations {
+		if expiration != 0 {
+			exp := time.Unix(0, expiration)
+			if exp.After(time.Now()) {
+				db.ttl.add(ds.NewJob(key, exp))
+			} else {
+				err := db.Del([]byte(key))
+				if err != nil {
+					return err
+				}
+			}
+		}
+	}
+
 	return nil
 }
 
