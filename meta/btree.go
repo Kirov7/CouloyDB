@@ -38,6 +38,9 @@ func (bt *BTree) Get(key []byte) *data.LogPos {
 		Key: key,
 	}
 
+	bt.lock.RLock()
+	defer bt.lock.RUnlock()
+
 	value := bt.tree.Get(item)
 	if value == nil {
 		return nil
