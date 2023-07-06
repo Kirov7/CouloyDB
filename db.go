@@ -132,7 +132,9 @@ func (db *DB) put(key, value []byte, duration time.Duration) error {
 		return err
 	}
 
-	db.ttl.add(ds.NewJob(string(key), time.Unix(0, expiration)))
+	if duration != 0 {
+		db.ttl.add(ds.NewJob(string(key), time.Unix(0, expiration)))
+	}
 
 	db.Notify(string(key), value, PutEvent)
 

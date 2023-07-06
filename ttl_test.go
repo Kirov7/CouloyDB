@@ -24,9 +24,9 @@ func TestDB_TTL(t *testing.T) {
 	err = db.PutWithExpiration(bytex.GetTestKey(1), bytex.RandomBytes(24), 1*time.Second)
 	assert.Nil(t, err)
 
-	time.Sleep(1005 * time.Millisecond)
+	time.Sleep(1 * time.Second)
 
-	// after one second (maybe with a little time difference), key 000000001 should have expired and been deleted
+	// after one second, key 000000001 should have expired and been deleted
 	_, err = db.Get(bytex.GetTestKey(1))
 	assert.NotNil(t, err)
 	assert.Equal(t, public.ErrKeyNotFound, err)
@@ -62,7 +62,7 @@ func TestDB_TTL_Restart(t *testing.T) {
 	err = db.Close()
 	assert.Nil(t, err)
 
-	time.Sleep(2005 * time.Millisecond)
+	time.Sleep(2000 * time.Millisecond)
 
 	db, err = NewCouloyDB(DefaultOptions())
 	assert.Nil(t, err)

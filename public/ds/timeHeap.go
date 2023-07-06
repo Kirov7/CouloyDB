@@ -47,13 +47,6 @@ func (th *TimeHeap) Remove(key string) {
 	}
 }
 
-func (th *TimeHeap) IsExpired(key string) bool {
-	if _, ok := th.heap.index[key]; ok {
-		return th.Get(key).Expiration.Before(time.Now())
-	}
-	return true
-}
-
 func (th *TimeHeap) Peek() *Job {
 	if th.IsEmpty() {
 		return nil

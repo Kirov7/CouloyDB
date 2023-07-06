@@ -45,7 +45,9 @@ func (ttl *ttl) isExpired(key string) bool {
 	ttl.mu.Lock()
 	defer ttl.mu.Unlock()
 
-	return ttl.timeHeap.IsExpired(key)
+	job := ttl.timeHeap.Get(key)
+
+	return job != nil && !job.Expiration.After(time.Now())
 }
 
 func (ttl *ttl) start() {
