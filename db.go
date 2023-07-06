@@ -1,6 +1,7 @@
 package CouloyDB
 
 import (
+	"context"
 	"encoding/binary"
 	"errors"
 	"github.com/Kirov7/CouloyDB/data"
@@ -35,6 +36,7 @@ type DB struct {
 	L            *lua.LState
 	oracle       *oracle
 	ttl          *ttl
+	wm           *watcherManager
 }
 
 func NewCouloyDB(opt Options) (*DB, error) {
@@ -66,6 +68,7 @@ func NewCouloyDB(opt Options) (*DB, error) {
 		mergeChan: make(chan struct{}),
 		mergeDone: make(chan error),
 		flock:     fl,
+		wm:        newWatcherManager(),
 	}
 
 	db.ttl = newTTL(func(key string) error {
@@ -90,6 +93,8 @@ func NewCouloyDB(opt Options) (*DB, error) {
 	go db.mergeWorker()
 
 	go db.ttl.start()
+
+	go db.wm.start()
 
 	return db, nil
 }
@@ -128,6 +133,8 @@ func (db *DB) put(key, value []byte, duration time.Duration) error {
 	}
 
 	db.ttl.add(ds.NewJob(string(key), time.Unix(0, expiration)))
+
+	db.Notify(string(key), value, PutEvent)
 
 	if ok := db.memTable.Put(key, pos); !ok {
 		return public.ErrUpdateIndexFailed
@@ -176,6 +183,8 @@ func (db *DB) Del(key []byte) error {
 	}
 
 	db.ttl.del(string(key))
+
+	db.Notify(string(key), nil, DelEvent)
 
 	// Delete key in memory memTable
 	if ok := db.memTable.Del(key); !ok {
@@ -275,6 +284,8 @@ func (db *DB) Close() error {
 	}
 
 	db.ttl.stop()
+
+	db.wm.stop()
 	return nil
 }
 
@@ -603,6 +614,20 @@ func parseLogRecordKey(key []byte) ([]byte, int64) {
 
 func (db *DB) GetTxId() int64 {
 	return db.oracle.GetTxId()
+}
+
+func (db *DB) Watch(ctx context.Context, key string) <-chan *watchEvent {
+	return db.wm.watch(ctx, key)
+}
+
+func (db *DB) UnWatch(watcher *Watcher) {
+	db.wm.unWatch(watcher)
+}
+
+func (db *DB) Notify(key string, value []byte, entryType eventType) {
+	if db.wm.watched(key) {
+		db.wm.notify(&watchEvent{key: key, value: value, eventType: entryType})
+	}
 }
 
 func deleteLessThan[T comparable](s []T, val T) []T {

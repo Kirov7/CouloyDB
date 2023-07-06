@@ -7,28 +7,28 @@ import (
 	"time"
 )
 
-type EventType byte
+type eventType byte
 
 const (
-	PutEvent EventType = iota
+	PutEvent eventType = iota
 	DelEvent
 )
 
-type WatchEvent struct {
-	Key       string
-	Value     []byte
-	EventType EventType
+type watchEvent struct {
+	key       string
+	value     []byte
+	eventType eventType
 }
 
-type WatcherManager struct {
+type watcherManager struct {
 	lock     *sync.RWMutex
 	watchers map[string]map[*Watcher]struct{} // key to watchers
 	queue    *ds.EventQueue
 	closeCh  chan struct{}
 }
 
-func NewWatcherManager() *WatcherManager {
-	return &WatcherManager{
+func newWatcherManager() *watcherManager {
+	return &watcherManager{
 		lock:     &sync.RWMutex{},
 		watchers: make(map[string]map[*Watcher]struct{}),
 		queue:    ds.NewEventQueue(),
@@ -36,23 +36,23 @@ func NewWatcherManager() *WatcherManager {
 	}
 }
 
-func (wm *WatcherManager) closeWatcherListener(watcher *Watcher) {
+func (wm *watcherManager) closeWatcherListener(watcher *Watcher) {
 	select {
 	case <-watcher.ctx.Done():
 		wm.lock.Lock()
-		wm.UnWatch(watcher)
+		wm.unWatch(watcher)
 		wm.lock.Unlock()
 	case <-wm.closeCh:
 		return
 	}
 }
 
-func (wm *WatcherManager) Watch(ctx context.Context, key string) <-chan *WatchEvent {
+func (wm *watcherManager) watch(ctx context.Context, key string) <-chan *watchEvent {
 
 	watcher := &Watcher{
 		key:      key,
 		ctx:      ctx,
-		respCh:   make(chan *WatchEvent, 128),
+		respCh:   make(chan *watchEvent, 128),
 		canceled: false,
 	}
 
@@ -71,7 +71,7 @@ func (wm *WatcherManager) Watch(ctx context.Context, key string) <-chan *WatchEv
 	return watcher.respCh
 }
 
-func (wm *WatcherManager) UnWatch(watcher *Watcher) {
+func (wm *watcherManager) unWatch(watcher *Watcher) {
 	if !watcher.canceled {
 		close(watcher.respCh)
 		watcher.canceled = true
@@ -83,36 +83,37 @@ func (wm *WatcherManager) UnWatch(watcher *Watcher) {
 	}
 }
 
-func (wm *WatcherManager) Watched(key string) bool {
+func (wm *watcherManager) watched(key string) bool {
 	_, ok := wm.watchers[key]
 	return ok
 }
 
-func (wm *WatcherManager) Notify(watchEvent *WatchEvent) {
+func (wm *watcherManager) notify(watchEvent *watchEvent) {
 	wm.queue.Write(watchEvent)
 }
 
-func (wm *WatcherManager) Start() {
+func (wm *watcherManager) start() {
 	for {
-		event, ok := wm.queue.Read().(*WatchEvent)
+		event, ok := wm.queue.Read().(*watchEvent)
 
 		if !ok {
 			break
 		}
 
 		wm.lock.RLock()
-		for watcher := range wm.watchers[event.Key] {
+		for watcher := range wm.watchers[event.key] {
+			watcher := watcher
 			if watcher.canceled {
 				continue
 			}
 
-			watcher.sendResp(event)
+			go watcher.sendResp(event)
 		}
 		wm.lock.RUnlock()
 	}
 }
 
-func (wm *WatcherManager) Close() {
+func (wm *watcherManager) stop() {
 	wm.queue.Close()
 
 	close(wm.closeCh)
@@ -122,7 +123,7 @@ func (wm *WatcherManager) Close() {
 
 	for _, watchers := range wm.watchers {
 		for watcher := range watchers {
-			wm.UnWatch(watcher)
+			wm.unWatch(watcher)
 		}
 	}
 }
@@ -130,11 +131,11 @@ func (wm *WatcherManager) Close() {
 type Watcher struct {
 	key      string
 	ctx      context.Context
-	respCh   chan *WatchEvent
+	respCh   chan *watchEvent
 	canceled bool
 }
 
-func (w *Watcher) sendResp(event *WatchEvent) {
+func (w *Watcher) sendResp(event *watchEvent) {
 	timeout := 100 * time.Millisecond
 	timer := time.NewTimer(timeout)
 	defer timer.Stop()
