@@ -18,51 +18,51 @@ func NewTimeHeap() *TimeHeap {
 	}
 }
 
-func (jh *TimeHeap) Push(job *Job) {
-	if _, ok := jh.heap.index[job.Key]; ok {
-		jh.heap.update(job)
+func (th *TimeHeap) Push(job *Job) {
+	if _, ok := th.heap.index[job.Key]; ok {
+		th.heap.update(job)
 	} else {
-		heap.Push(&jh.heap, job)
+		heap.Push(&th.heap, job)
 	}
 }
 
-func (jh *TimeHeap) Pop() *Job {
-	if jh.heap.isEmpty() {
+func (th *TimeHeap) Pop() *Job {
+	if th.heap.isEmpty() {
 		return nil
 	}
-	return heap.Pop(&jh.heap).(*Job)
+	return heap.Pop(&th.heap).(*Job)
 }
 
-func (jh *TimeHeap) Get(key string) *Job {
-	if i, ok := jh.heap.index[key]; ok {
-		return jh.heap.heap[i]
+func (th *TimeHeap) Get(key string) *Job {
+	if i, ok := th.heap.index[key]; ok {
+		return th.heap.heap[i]
 	}
 	return nil
 }
 
-func (jh *TimeHeap) Remove(key string) {
-	if i, ok := jh.heap.index[key]; ok {
-		delete(jh.heap.index, key)
-		heap.Remove(&jh.heap, i)
+func (th *TimeHeap) Remove(key string) {
+	if i, ok := th.heap.index[key]; ok {
+		delete(th.heap.index, key)
+		heap.Remove(&th.heap, i)
 	}
 }
 
-func (jh *TimeHeap) IsExpired(key string) bool {
-	if _, ok := jh.heap.index[key]; ok {
-		return jh.Get(key).Expiration.Before(time.Now())
+func (th *TimeHeap) IsExpired(key string) bool {
+	if _, ok := th.heap.index[key]; ok {
+		return th.Get(key).Expiration.Before(time.Now())
 	}
 	return true
 }
 
-func (jh *TimeHeap) Peek() *Job {
-	if jh.IsEmpty() {
+func (th *TimeHeap) Peek() *Job {
+	if th.IsEmpty() {
 		return nil
 	}
-	return jh.heap.peek().(*Job)
+	return th.heap.peek().(*Job)
 }
 
-func (jh *TimeHeap) IsEmpty() bool {
-	return jh.heap.isEmpty()
+func (th *TimeHeap) IsEmpty() bool {
+	return th.heap.isEmpty()
 }
 
 type Job struct {
