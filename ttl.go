@@ -68,11 +68,11 @@ func (ttl *ttl) stop() {
 	close(ttl.eventCh)
 }
 
-const maxDuration time.Duration = 1<<63 - 1
+const MaxDuration time.Duration = 1<<63 - 1
 
 func (ttl *ttl) exec() {
 	now := time.Now()
-	duration := maxDuration
+	duration := MaxDuration
 
 	ttl.mu.Lock()
 	job := ttl.timeHeap.Peek()
