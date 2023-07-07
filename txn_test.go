@@ -1,130 +1,134 @@
 package CouloyDB
 
 import (
-	"bytes"
 	"github.com/Kirov7/CouloyDB/public"
 	"github.com/Kirov7/CouloyDB/public/utils/wait"
-	"log"
-	"strconv"
+	"github.com/stretchr/testify/assert"
 	"testing"
 	"time"
 )
 
-func TestDB_SerialTransaction(t *testing.T) {
-	conf := DefaultOptions()
-	db, err := NewCouloyDB(conf)
-	if err != nil {
-		log.Fatal(err)
-	}
+func TestDB_RWTransaction(t *testing.T) {
+	db, err := NewCouloyDB(DefaultOptions())
+	assert.Nil(t, err)
+	assert.NotNil(t, db)
+	defer destroyCouloyDB(db)
 
-	readLoop1 := func(txn *Txn) error {
-		for i := 1; i < 11; i++ {
-			v, _ := txn.Get([]byte(strconv.Itoa(i)))
-			log.Printf("Read key: %v, value: %v in read loop1", i, string(v))
-			time.Sleep(10 * time.Millisecond)
-		}
-		return nil
-	}
+	t.Run("RWTransaction", func(t *testing.T) {
+		wg := wait.NewWait()
+		wg.Add(2)
 
-	readLoop2 := func(txn *Txn) error {
-		for i := 1; i < 11; i++ {
-			v, _ := txn.Get([]byte(strconv.Itoa(i)))
-			log.Printf("Read key: %v, value: %v in read loop2", i, string(v))
-			time.Sleep(20 * time.Millisecond)
-		}
-		return nil
-	}
+		go func() {
+			defer wg.Done()
 
-	writeLoop1 := func(txn *Txn) error {
-		for i := 1; i <= 10; i++ {
-			err := txn.Put([]byte(strconv.Itoa(i)), []byte(strconv.Itoa(i)))
-			if err != nil {
-				return err
-			}
-			log.Printf("Write key: %v, value: %v in write loop1", i, i)
-		}
-		return nil
-	}
+			err := db.RWTransaction(false, func(txn *Txn) error {
+				err := txn.Put([]byte("key"), []byte("initial_value"))
+				assert.Nil(t, err)
 
-	writeLoop2 := func(txn *Txn) error {
-		for i := 11; i <= 20; i++ {
-			err := txn.Put([]byte(strconv.Itoa(i)), []byte(strconv.Itoa(i)))
-			if err != nil {
-				return err
-			}
-			log.Printf("Write key: %v, value: %v in write loop2", i, i)
-		}
-		return nil
-	}
+				value, err := txn.Get([]byte("key"))
+				assert.Nil(t, err)
+				assert.Equal(t, []byte("initial_value"), value)
 
-	w := wait.NewWait()
+				// simulate waiting to ensure that the txn of goroutine 2 is committed first
+				time.Sleep(200 * time.Millisecond)
 
-	_ = db.RWTransaction(false, writeLoop1)
+				value, err = txn.Get([]byte("key"))
+				assert.Nil(t, err)
+				assert.Equal(t, []byte("initial_value"), value)
 
-	w.Add(1)
-	go func() {
-		_ = db.SerialTransaction(true, readLoop1)
-		w.Done()
-	}()
+				return nil
+			})
 
-	w.Add(1)
-	go func() {
-		_ = db.SerialTransaction(false, writeLoop2)
-		w.Done()
-	}()
+			// since txn of goroutine 2 is committed, txn of goroutine 1 can't commit successfully.
+			// txn of goroutine 2 have to roll back.
+			assert.NotNil(t, err)
+			assert.Equal(t, err, public.ErrTransactionConflict)
+		}()
 
-	w.Add(1)
-	go func() {
-		_ = db.SerialTransaction(true, readLoop2)
-		w.Done()
-	}()
+		go func() {
+			defer wg.Done()
 
-	w.Wait()
-	_ = db.Close()
+			// simulate waiting to ensure that the txn of goroutine 1 have started
+			time.Sleep(100 * time.Millisecond)
+
+			err := db.RWTransaction(false, func(txn *Txn) error {
+				// put the same key with txn of goroutine 1
+				err := txn.Put([]byte("key"), []byte("new_value"))
+				assert.Nil(t, err)
+
+				return nil
+			})
+			assert.Nil(t, err)
+		}()
+
+		wg.Wait()
+
+		finalValue, err := db.Get([]byte("key"))
+		assert.Nil(t, err)
+		// txn of goroutine 2 is committed successfully
+		assert.Equal(t, []byte("new_value"), finalValue)
+	})
 }
 
 func TestDB_SerialTransaction_With_RWTransaction(t *testing.T) {
-	conf := DefaultOptions()
-	db, _ := NewCouloyDB(conf)
+	db, err := NewCouloyDB(DefaultOptions())
+	assert.Nil(t, err)
+	assert.NotNil(t, db)
+	defer destroyCouloyDB(db)
 
-	writeAciont1 := func(txn *Txn) error {
-		time.Sleep(time.Second)
-		err := txn.Put([]byte("key"), []byte("hello"))
-		if err != nil {
-			return nil
-		}
-		return nil
-	}
+	t.Run("SerialTransaction_With_RWTransaction", func(t *testing.T) {
+		wg := wait.NewWait()
+		wg.Add(2)
 
-	writeAciont2 := func(txn *Txn) error {
-		err := txn.Put([]byte("key"), []byte("world"))
-		if err != nil {
-			return nil
-		}
-		return nil
-	}
+		go func() {
+			defer wg.Done()
 
-	w := wait.NewWait()
+			err := db.RWTransaction(false, func(txn *Txn) error {
+				err := txn.Put([]byte("key"), []byte("initial_value"))
+				assert.Nil(t, err)
 
-	w.Add(1)
-	go func() {
-		time.Sleep(100 * time.Millisecond) // Ensure the serializable transaction have started executing
-		err := db.RWTransaction(false, writeAciont1)
-		// Because the serializable transaction has been committed before the RW transaction commits
-		// So this RW transaction will definitely fail to commit due to conflicts
-		if err != public.ErrTransactionConflict {
-			t.Fail()
-		}
-		w.Done()
-	}()
-	go func() {
-		_ = db.SerialTransaction(false, writeAciont2)
-		w.Done()
-	}()
+				value, err := txn.Get([]byte("key"))
+				assert.Nil(t, err)
+				assert.Equal(t, []byte("initial_value"), value)
 
-	w.Wait()
-	v, _ := db.Get([]byte("key"))
-	if bytes.Compare(v, []byte("world")) != 0 {
-		t.Fail()
-	}
+				// simulate waiting to ensure that the txn of goroutine 2 already began
+				// once serial txn began, the rw txn can't commit
+				time.Sleep(200 * time.Millisecond)
+
+				value, err = txn.Get([]byte("key"))
+				assert.Nil(t, err)
+				assert.Equal(t, []byte("initial_value"), value)
+
+				return nil
+			})
+
+			// since txn of goroutine 2 is committed, txn of goroutine 1 can't commit successfully.
+			// txn of goroutine 2 have to roll back.
+			assert.NotNil(t, err)
+			assert.Equal(t, err, public.ErrTransactionConflict)
+		}()
+
+		go func() {
+			defer wg.Done()
+
+			// simulate waiting to ensure that the txn of goroutine 1 have started
+			time.Sleep(100 * time.Millisecond)
+
+			err := db.SerialTransaction(false, func(txn *Txn) error {
+				// put the same key with txn of goroutine 1
+				err := txn.Put([]byte("key"), []byte("new_value"))
+				assert.Nil(t, err)
+
+				return nil
+			})
+			assert.Nil(t, err)
+		}()
+
+		wg.Wait()
+
+		finalValue, err := db.Get([]byte("key"))
+		assert.Nil(t, err)
+		// txn of goroutine 2 is committed successfully
+		assert.Equal(t, []byte("new_value"), finalValue)
+	})
 }
