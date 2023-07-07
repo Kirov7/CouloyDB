@@ -299,6 +299,9 @@ func (txn *Txn) Get(key []byte) ([]byte, error) {
 
 // Put writes data to the db, but instead of writing it back to memtable, it writes to pendingWrites first
 func (txn *Txn) Put(key []byte, value []byte) error {
+	if txn.readOnly {
+		return public.ErrUpdateInReadOnlyTxn
+	}
 	logRecord := &data.LogRecord{
 		Key:   encodeKeyWithTxId(key, txn.startTs),
 		Value: value,
@@ -314,6 +317,9 @@ func (txn *Txn) Put(key []byte, value []byte) error {
 
 // Del delete data to the db, but instead of writing it back to memtable, it writes to pendingWrites first
 func (txn *Txn) Del(key []byte) error {
+	if txn.readOnly {
+		return public.ErrUpdateInReadOnlyTxn
+	}
 	logRecord := &data.LogRecord{
 		Key:  encodeKeyWithTxId(key, txn.startTs),
 		Type: data.LogRecordDeleted,

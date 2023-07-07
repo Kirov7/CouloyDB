@@ -14,4 +14,5 @@ var (
 	ErrTransactionConflict    = errors.New("transaction concurrency conflict, please try again")
 	ErrHeapEmpty              = errors.New("heap is empty")
 	ErrTxnFnEmpty             = errors.New("the txn fn is empty")
+	ErrUpdateInReadOnlyTxn    = errors.New("the read only txn can't update")
 )
