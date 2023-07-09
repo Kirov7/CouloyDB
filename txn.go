@@ -53,7 +53,7 @@ func (o *oracle) hasConflict(txn *Txn) bool {
 		}
 		// if the startTs is less than the commitTs of the committed transaction
 		// possible transaction conflicts (especially dirty writing)
-		for k, _ := range txn.pendingWrites {
+		for k := range txn.pendingWrites {
 			if _, has := committedTxn.pendingWrites[k]; has {
 				return true
 			}
@@ -237,7 +237,7 @@ func (txn *Txn) commit() error {
 		defer txn.db.oracle.mu.Unlock()
 	}
 	// check whether data conflicts exist
-	if !txn.db.oracle.hasConflict(txn) {
+	if txn.isolationLevel == Serializable || !txn.db.oracle.hasConflict(txn) {
 		// write the commit-mark to datafile
 		logRecord := &data.LogRecord{
 			Key:  encodeKeyWithTxId(public.TX_COMMIT_KEY, txn.startTs),
