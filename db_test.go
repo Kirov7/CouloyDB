@@ -3,7 +3,7 @@ package CouloyDB
 import (
 	"fmt"
 	"github.com/Kirov7/CouloyDB/public"
-	"github.com/Kirov7/CouloyDB/public/utils/bytes"
+	"github.com/Kirov7/CouloyDB/public/utils/bytex"
 	"github.com/Kirov7/CouloyDB/public/utils/wait"
 	"github.com/stretchr/testify/assert"
 	"os"
@@ -38,27 +38,27 @@ func TestDB_Put(t *testing.T) {
 	assert.NotNil(t, couloyDB)
 
 	// Normally put key 1 and a random value to db
-	err = couloyDB.Put(bytes.IntToBytes(1), bytes.RandomBytes(6))
+	err = couloyDB.Put(bytex.GetTestKey(1), bytex.RandomBytes(6))
 	assert.Nil(t, err)
-	value, err := couloyDB.Get(bytes.IntToBytes(1))
+	value, err := couloyDB.Get(bytex.GetTestKey(1))
 	assert.NotNil(t, value)
 	assert.Nil(t, err)
 
 	// Test repeatedly key
-	err = couloyDB.Put(bytes.IntToBytes(1), bytes.RandomBytes(6))
+	err = couloyDB.Put(bytex.GetTestKey(1), bytex.RandomBytes(6))
 	assert.Nil(t, err)
-	value, err = couloyDB.Get(bytes.IntToBytes(1))
+	value, err = couloyDB.Get(bytex.GetTestKey(1))
 	assert.NotNil(t, value)
 	assert.Nil(t, err)
 
 	// Test empty key
-	err = couloyDB.Put([]byte{}, bytes.RandomBytes(6))
+	err = couloyDB.Put([]byte{}, bytex.RandomBytes(6))
 	assert.Equal(t, err, public.ErrKeyIsEmpty)
 
 	// Test empty value
-	err = couloyDB.Put(bytes.IntToBytes(2), []byte{})
+	err = couloyDB.Put(bytex.GetTestKey(2), []byte{})
 	assert.Nil(t, err)
-	value, err = couloyDB.Get(bytes.IntToBytes(2))
+	value, err = couloyDB.Get(bytex.GetTestKey(2))
 	assert.Nil(t, err)
 	assert.Len(t, value, 0)
 }
@@ -71,14 +71,14 @@ func TestDB_Get(t *testing.T) {
 	assert.Nil(t, err)
 	assert.NotNil(t, couloyDB)
 
-	err = couloyDB.Put(bytes.IntToBytes(1), bytes.IntToBytes(1))
+	err = couloyDB.Put(bytex.GetTestKey(1), bytex.GetTestKey(1))
 	assert.Nil(t, err)
 
 	// Test get normally
-	value, err := couloyDB.Get(bytes.IntToBytes(1))
+	value, err := couloyDB.Get(bytex.GetTestKey(1))
 	assert.NotNil(t, value)
 	assert.Nil(t, err)
-	assert.Equal(t, value, bytes.IntToBytes(1))
+	assert.Equal(t, value, bytex.GetTestKey(1))
 
 	// Test get when key is empty
 	value, err = couloyDB.Get([]byte{})
@@ -87,18 +87,18 @@ func TestDB_Get(t *testing.T) {
 	assert.Equal(t, public.ErrKeyIsEmpty, err)
 
 	// Test get when the same key changes
-	err = couloyDB.Put(bytes.IntToBytes(2), bytes.RandomBytes(64))
-	v1, err := couloyDB.Get(bytes.IntToBytes(2))
+	err = couloyDB.Put(bytex.GetTestKey(2), bytex.RandomBytes(64))
+	v1, err := couloyDB.Get(bytex.GetTestKey(2))
 	assert.Nil(t, err)
-	err = couloyDB.Put(bytes.IntToBytes(2), bytes.RandomBytes(64))
-	v2, err := couloyDB.Get(bytes.IntToBytes(2))
+	err = couloyDB.Put(bytex.GetTestKey(2), bytex.RandomBytes(64))
+	v2, err := couloyDB.Get(bytex.GetTestKey(2))
 	assert.Nil(t, err)
 	assert.NotEqual(t, v1, v2)
 
 	// Test get after delete key
-	err = couloyDB.Del(bytes.IntToBytes(2))
+	err = couloyDB.Del(bytex.GetTestKey(2))
 	assert.Nil(t, err)
-	value, err = couloyDB.Get(bytes.IntToBytes(2))
+	value, err = couloyDB.Get(bytex.GetTestKey(2))
 	assert.Nil(t, value)
 	assert.NotNil(t, err)
 	assert.Equal(t, public.ErrKeyNotFound, err)
@@ -121,7 +121,7 @@ func TestDB_Put_Get_In_Parallel(t *testing.T) {
 	for id := 0; id < workerNum; id++ {
 		go func(id int) {
 			defer w.Done()
-			err := couloyDB.Put(bytes.IntToBytes(id), bytes.IntToBytes(id))
+			err := couloyDB.Put(bytex.GetTestKey(id), bytex.GetTestKey(id))
 			assert.Nil(t, err)
 		}(id)
 	}
@@ -133,7 +133,7 @@ func TestDB_Put_Get_In_Parallel(t *testing.T) {
 	for i := 0; i < workerNum; i++ {
 		go func(id int) {
 			defer w.Done()
-			value, err := couloyDB.Get(bytes.IntToBytes(id))
+			value, err := couloyDB.Get(bytex.GetTestKey(id))
 			assert.Nil(t, err)
 			assert.NotNil(t, value)
 		}(i)
@@ -151,7 +151,7 @@ func TestDB_Put_Get_In_Parallel(t *testing.T) {
 	for id := 0; id < workerNum; id++ {
 		go func(id int) {
 			defer w.Done()
-			key := bytes.IntToBytes(id)
+			key := bytex.GetTestKey(id)
 			err := couloyDB.Put(key, append(key, fill...))
 			assert.Nil(t, err)
 		}(id)
@@ -164,7 +164,7 @@ func TestDB_Put_Get_In_Parallel(t *testing.T) {
 	for id := 0; id < workerNum; id++ {
 		go func(id int) {
 			defer w.Done()
-			key := bytes.IntToBytes(id)
+			key := bytex.GetTestKey(id)
 			value, err := couloyDB.Get(key)
 			assert.Nil(t, err)
 			assert.Equal(t, value, append(key, fill...))
@@ -185,13 +185,13 @@ func TestDB_Del(t *testing.T) {
 	assert.Nil(t, err)
 	assert.NotNil(t, couloyDB)
 
-	err = couloyDB.Put(bytes.IntToBytes(1), bytes.IntToBytes(1))
+	err = couloyDB.Put(bytex.GetTestKey(1), bytex.GetTestKey(1))
 	assert.Nil(t, err)
 
 	// Test del normally
-	err = couloyDB.Del(bytes.IntToBytes(1))
+	err = couloyDB.Del(bytex.GetTestKey(1))
 	assert.Nil(t, err)
-	value, err := couloyDB.Get(bytes.IntToBytes(2))
+	value, err := couloyDB.Get(bytex.GetTestKey(2))
 	assert.Nil(t, value)
 	assert.NotNil(t, err)
 	assert.Equal(t, public.ErrKeyNotFound, err)
@@ -224,7 +224,7 @@ func TestDB_Reboot(t *testing.T) {
 	for id := 0; id < workerNum; id++ {
 		go func(id int) {
 			defer w.Done()
-			key := bytes.IntToBytes(id)
+			key := bytex.GetTestKey(id)
 			err := couloyDB.Put(key, append(key, fill...))
 			assert.Nil(t, err)
 		}(id)
@@ -245,7 +245,7 @@ func TestDB_Reboot(t *testing.T) {
 	for id := 0; id < workerNum; id++ {
 		go func(id int) {
 			defer w.Done()
-			key := bytes.IntToBytes(id)
+			key := bytex.GetTestKey(id)
 			value, err := couloyDB.Get(key)
 			assert.Nil(t, err)
 			assert.Equal(t, value, append(key, fill...))
