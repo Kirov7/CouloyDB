@@ -236,7 +236,7 @@ func TestKuloy(t *testing.T) {
 
 ## 🔮 What will I do next?
 
-- [x] Implement batch write and basic transaction functions [ now, CouloyDB supports the RC transaction isolation level ].
+- [x] Implement batch write and basic transaction functions [ now, CouloyDB supports the RC and the Serializable transaction isolation level ].
 - [ ] Optimize hintfile storage structure to support the memtable build faster (may use gob).
 - [ ] Increased use of flatbuffers build options to support faster reading speed.
 - [x] Use mmap to read data file that on disk. [ however, the official mmap library is not optimized enough and needs to be further optimized ]
