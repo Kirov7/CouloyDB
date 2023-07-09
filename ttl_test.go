@@ -75,3 +75,49 @@ func TestDB_TTL_Restart(t *testing.T) {
 	assert.Nil(t, value)
 	assert.NotNil(t, err)
 }
+
+func TestDB_TTL_Persist(t *testing.T) {
+	options := DefaultOptions()
+	options.SyncWrites = false
+	db, err := NewCouloyDB(options)
+
+	assert.NotNil(t, db)
+	assert.Nil(t, err)
+
+	defer destroyCouloyDB(db)
+
+	err = db.PutWithExpiration(bytex.GetTestKey(0), bytex.RandomBytes(24), 100*time.Millisecond)
+	assert.Nil(t, err)
+
+	db.Persist(bytex.GetTestKey(0))
+
+	time.Sleep(100 * time.Millisecond)
+
+	value, err := db.Get(bytex.GetTestKey(0))
+	assert.Nil(t, err)
+	assert.NotNil(t, value)
+}
+
+func TestDB_TTL_Reset(t *testing.T) {
+	options := DefaultOptions()
+	options.SyncWrites = false
+	db, err := NewCouloyDB(options)
+
+	assert.NotNil(t, db)
+	assert.Nil(t, err)
+
+	defer destroyCouloyDB(db)
+
+	err = db.PutWithExpiration(bytex.GetTestKey(0), bytex.RandomBytes(24), 100*time.Millisecond)
+	assert.Nil(t, err)
+
+	err = db.Put(bytex.GetTestKey(0), bytex.RandomBytes(24))
+	assert.Nil(t, err)
+
+	// since the second put operation reset the expiration of key 000000000, it doesn't expire
+	time.Sleep(100 * time.Millisecond)
+
+	value, err := db.Get(bytex.GetTestKey(0))
+	assert.Nil(t, err)
+	assert.NotNil(t, value)
+}

@@ -118,6 +118,11 @@ func (db *DB) put(key, value []byte, duration time.Duration) error {
 	var expiration int64
 	if duration != 0 {
 		expiration = time.Now().Add(duration).UnixNano()
+		db.ttl.add(ds.NewJob(string(key), time.Unix(0, expiration)))
+	} else {
+		// If it is a key without an expiration time set
+		// you may need to remove the previously set expiration time
+		db.ttl.del(string(key))
 	}
 
 	logRecord := &data.LogRecord{
@@ -130,10 +135,6 @@ func (db *DB) put(key, value []byte, duration time.Duration) error {
 	pos, err := db.appendLogRecordWithLock(logRecord)
 	if err != nil {
 		return err
-	}
-
-	if duration != 0 {
-		db.ttl.add(ds.NewJob(string(key), time.Unix(0, expiration)))
 	}
 
 	db.Notify(string(key), value, PutEvent)
@@ -171,6 +172,8 @@ func (db *DB) Del(key []byte) error {
 		return nil
 	}
 
+	db.ttl.del(string(key))
+
 	// Build deleted tags LogRecord
 	logRecord := &data.LogRecord{
 		Key:  encodeKeyWithTxId(key, public.NO_TX_ID),
@@ -181,8 +184,6 @@ func (db *DB) Del(key []byte) error {
 	if err != nil {
 		return err
 	}
-
-	db.ttl.del(string(key))
 
 	db.Notify(string(key), nil, DelEvent)
 
@@ -611,6 +612,10 @@ func parseLogRecordKey(key []byte) ([]byte, int64) {
 
 func (db *DB) GetTxId() int64 {
 	return db.oracle.GetTxId()
+}
+
+func (db *DB) Persist(key []byte) {
+	db.ttl.del(string(key))
 }
 
 func (db *DB) Watch(ctx context.Context, key string) <-chan *watchEvent {
