@@ -2,6 +2,7 @@ package CouloyDB
 
 import (
 	"github.com/Kirov7/CouloyDB/public/ds"
+	"log"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -90,7 +91,10 @@ func (ttl *ttl) exec() {
 		return
 	}
 
-	go ttl.deleter(job.Key)
+	go func() {
+		err := ttl.deleter(job.Key)
+		log.Printf("there is a error occured by deleter: %v", err.Error())
+	}()
 }
 
 func (ttl *ttl) notify() {

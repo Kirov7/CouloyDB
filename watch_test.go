@@ -3,7 +3,6 @@ package CouloyDB
 import (
 	"context"
 	"github.com/stretchr/testify/assert"
-	"log"
 	"testing"
 	"time"
 )
@@ -20,8 +19,6 @@ func TestDB_Watch(t *testing.T) {
 	defer cancel()
 
 	watchCh := db.Watch(ctx, key)
-
-	log.Printf("starting watch key")
 
 	go func() {
 		_ = db.Put([]byte(key), []byte("value1"))
@@ -41,11 +38,6 @@ func TestDB_Watch(t *testing.T) {
 			assert.Fail(t, "Context canceled before receiving all events")
 			return
 		case event, ok := <-watchCh:
-			if event.eventType == PutEvent {
-				log.Printf("The value of %v is changed to %v", event.key, string(event.value))
-			} else {
-				log.Printf("%v has been deleted", event.key)
-			}
 			assert.True(t, ok)
 			assert.Equal(t, expectedEvent, event)
 		}
