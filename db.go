@@ -27,6 +27,10 @@ const (
 	String DataStructureType = iota
 )
 
+type Facade struct {
+	db *DB
+}
+
 type DB struct {
 	options      Options
 	activityFile *data.DataFile
@@ -118,15 +122,12 @@ func (db *DB) Put(key, value []byte) error {
 }
 
 func (db *DB) put(key, value []byte, duration time.Duration) error {
-	if len(key) == 0 {
-		return public.ErrKeyIsEmpty
-	}
-	if len(key) == 1 && (key[0] < 32 || key[0] == 127) {
-		return public.ErrKeyIsControlChar
+	if err := checkKey(key); err != nil {
+		return err
 	}
 
-	db.indexLocks[String].Lock()
-	defer db.indexLocks[String].Unlock()
+	db.getIndexLockByType(String).Lock()
+	defer db.getIndexLockByType(String).Unlock()
 
 	var expiration int64
 	if duration != 0 {
@@ -163,8 +164,8 @@ func (db *DB) Get(key []byte) ([]byte, error) {
 		return nil, public.ErrKeyIsEmpty
 	}
 
-	db.indexLocks[String].RLock()
-	defer db.indexLocks[String].RUnlock()
+	db.getIndexLockByType(String).RLock()
+	defer db.getIndexLockByType(String).RUnlock()
 
 	if db.ttl.isExpired(string(key)) {
 		// if the key is expired, just return and don't delete the key now
@@ -185,8 +186,8 @@ func (db *DB) Del(key []byte) error {
 	}
 	// Check if exist in memory memTable
 
-	db.indexLocks[String].Lock()
-	defer db.indexLocks[String].Unlock()
+	db.getIndexLockByType(String).Lock()
+	defer db.getIndexLockByType(String).Unlock()
 
 	if pos := db.memTable.Get(key); pos == nil {
 		return nil
@@ -218,8 +219,8 @@ func (db *DB) IsExist(key []byte) (bool, error) {
 	if len(key) == 0 {
 		return false, public.ErrKeyIsEmpty
 	}
-	db.indexLocks[String].RLock()
-	defer db.indexLocks[String].RUnlock()
+	db.getIndexLockByType(String).RLock()
+	defer db.getIndexLockByType(String).RUnlock()
 	// Check if exist in memory memTable
 	if pos := db.memTable.Get(key); pos == nil {
 		return false, public.ErrKeyNotFound
@@ -228,15 +229,16 @@ func (db *DB) IsExist(key []byte) (bool, error) {
 }
 
 func (db *DB) Size() int {
-	db.indexLocks[String].RLock()
-	defer db.indexLocks[String].RUnlock()
+	db.getIndexLockByType(String).RLock()
+	defer db.getIndexLockByType(String).RUnlock()
+	// may calculate expired key
 	return db.memTable.Count()
 }
 
 // ListKeys get all the key and return
 func (db *DB) ListKeys() [][]byte {
-	db.indexLocks[String].RLock()
-	defer db.indexLocks[String].RUnlock()
+	db.getIndexLockByType(String).RLock()
+	defer db.getIndexLockByType(String).RUnlock()
 	iterator := db.memTable.Iterator(false)
 	keys := make([][]byte, db.memTable.Count())
 	var idx int
@@ -250,8 +252,8 @@ func (db *DB) ListKeys() [][]byte {
 // Fold gets all the keys and executes the function passed in by the user.
 // Terminates the traversal when the function returns false
 func (db *DB) Fold(fn func(key []byte, value []byte) bool) error {
-	db.indexLocks[String].RLock()
-	defer db.indexLocks[String].RUnlock()
+	db.getIndexLockByType(String).RLock()
+	defer db.getIndexLockByType(String).RUnlock()
 	iterator := db.memTable.Iterator(false)
 	for iterator.Rewind(); iterator.Valid(); iterator.Next() {
 		value, err := db.getValueByPos(iterator.Value())
@@ -660,6 +662,24 @@ func (db *DB) Notify(key string, value []byte, entryType eventType) {
 	if db.wm.watched(key) {
 		db.wm.notify(&watchEvent{key: key, value: value, eventType: entryType})
 	}
+}
+
+func (db *DB) getIndexLockByType(typ DataStructureType) *sync.RWMutex {
+	switch typ {
+	case String:
+		return db.indexLocks[String]
+	}
+	return nil
+}
+
+func checkKey(key []byte) error {
+	if len(key) == 0 {
+		return public.ErrKeyIsEmpty
+	}
+	if len(key) == 1 && (key[0] < 32 || key[0] == 127) {
+		return public.ErrKeyIsControlChar
+	}
+	return nil
 }
 
 func deleteLessThan[T comparable](s []T, val T) []T {
