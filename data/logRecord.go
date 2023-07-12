@@ -23,13 +23,14 @@ const (
 
 const (
 	// crc type keySize ValueSize
-	// 4 + 1 + 5 + 5 = 15
-	maxLogRecordHeaderSize = binary.MaxVarintLen32*2 + binary.MaxVarintLen64 + 5
+	// 4 + 1 + 1 + 5 + 5 + 10 = 26
+	maxLogRecordHeaderSize = binary.MaxVarintLen32*2 + binary.MaxVarintLen64 + 6
 )
 
 type LogRecordHeader struct {
 	crc        uint32
 	RecordType LogRecordType
+	DSType     DataStructureType
 	KeySize    uint32
 	ValueSize  uint32
 	Expiration int64
@@ -39,6 +40,7 @@ type LogRecord struct {
 	Key        []byte
 	Value      []byte
 	Type       LogRecordType
+	DSType     DataStructureType
 	Expiration int64
 }
 
@@ -54,7 +56,8 @@ func EncodeLogRecord(log *LogRecord) ([]byte, int64) {
 
 	// 5th byte store the Type
 	header[4] = log.Type
-	var index = 5
+	header[5] = byte(log.DSType)
+	var index = 6
 	// after the 5th byte the data we store is the key, value and the expiration with varInt
 	index += binary.PutVarint(header[index:], int64(len(log.Key)))
 	index += binary.PutVarint(header[index:], int64(len(log.Value)))
@@ -84,9 +87,10 @@ func DecodeLogRecordHeader(buf []byte) (*LogRecordHeader, int64) {
 	header := &LogRecordHeader{
 		crc:        binary.LittleEndian.Uint32(buf[:4]),
 		RecordType: buf[4],
+		DSType:     DataStructureType(buf[5]),
 	}
 
-	var index = 5
+	var index = 6
 
 	// read the real keySize
 	keySize, n := binary.Varint(buf[index:])

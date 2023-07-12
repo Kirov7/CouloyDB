@@ -137,6 +137,7 @@ func (db *DB) put(key, value []byte, duration time.Duration) error {
 		Key:        encodeKeyWithTxId(key, public.NO_TX_ID),
 		Value:      value,
 		Type:       data.LogRecordNormal,
+		DSType:     data.String,
 		Expiration: expiration,
 	}
 

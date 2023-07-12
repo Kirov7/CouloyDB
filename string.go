@@ -22,17 +22,18 @@ func (f *Facade) SetNX(key, value []byte) error {
 		return err
 	}
 
-	f.db.getIndexLockByType(String).Lock()
-	defer f.db.getIndexLockByType(String).Unlock()
+	f.db.getIndexLockByType(data.String).Lock()
+	defer f.db.getIndexLockByType(data.String).Unlock()
 
 	if dataPos := f.db.memTable.Get(key); dataPos != nil {
 		return public.ErrKeyExist
 	}
 
 	logRecord := &data.LogRecord{
-		Key:   encodeKeyWithTxId(key, public.NO_TX_ID),
-		Value: value,
-		Type:  data.LogRecordNormal,
+		Key:    encodeKeyWithTxId(key, public.NO_TX_ID),
+		Value:  value,
+		Type:   data.LogRecordNormal,
+		DSType: data.String,
 	}
 
 	pos, err := f.db.appendLogRecordWithLock(logRecord)
@@ -49,8 +50,8 @@ func (f *Facade) SetNX(key, value []byte) error {
 }
 
 func (f *Facade) GetSet(key, value []byte) ([]byte, error) {
-	f.db.getIndexLockByType(String).Lock()
-	defer f.db.getIndexLockByType(String).Unlock()
+	f.db.getIndexLockByType(data.String).Lock()
+	defer f.db.getIndexLockByType(data.String).Unlock()
 
 	var (
 		oldVal []byte
@@ -70,9 +71,10 @@ func (f *Facade) GetSet(key, value []byte) ([]byte, error) {
 	}
 
 	logRecord := &data.LogRecord{
-		Key:   encodeKeyWithTxId(key, public.NO_TX_ID),
-		Value: value,
-		Type:  data.LogRecordNormal,
+		Key:    encodeKeyWithTxId(key, public.NO_TX_ID),
+		Value:  value,
+		Type:   data.LogRecordNormal,
+		DSType: data.String,
 	}
 
 	pos, err = f.db.appendLogRecordWithLock(logRecord)
@@ -89,8 +91,8 @@ func (f *Facade) GetSet(key, value []byte) ([]byte, error) {
 }
 
 func (f *Facade) StrLen(key []byte) (int, error) {
-	f.db.getIndexLockByType(String).RLock()
-	defer f.db.getIndexLockByType(String).RUnlock()
+	f.db.getIndexLockByType(data.String).RLock()
+	defer f.db.getIndexLockByType(data.String).RUnlock()
 
 	pos := f.db.memTable.Get(key)
 	if pos != nil {
