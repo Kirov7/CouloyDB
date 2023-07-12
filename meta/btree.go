@@ -5,19 +5,16 @@ import (
 	"github.com/Kirov7/CouloyDB/data"
 	"github.com/google/btree"
 	"sort"
-	"sync"
 )
 
 type BTree struct {
 	tree *btree.BTree
-	lock *sync.RWMutex
 }
 
 // NewBTree Init BTree struct
 func NewBTree() *BTree {
 	return &BTree{
 		tree: btree.New(32),
-		lock: new(sync.RWMutex),
 	}
 }
 
@@ -26,8 +23,6 @@ func (bt *BTree) Put(key []byte, pos *data.LogPos) bool {
 		Key: key,
 		Pos: pos,
 	}
-	bt.lock.Lock()
-	defer bt.lock.Unlock()
 
 	bt.tree.ReplaceOrInsert(item)
 	return true
@@ -37,9 +32,6 @@ func (bt *BTree) Get(key []byte) *data.LogPos {
 	item := &Item{
 		Key: key,
 	}
-
-	bt.lock.RLock()
-	defer bt.lock.RUnlock()
 
 	value := bt.tree.Get(item)
 	if value == nil {
@@ -52,8 +44,6 @@ func (bt *BTree) Del(key []byte) bool {
 	item := &Item{
 		Key: key,
 	}
-	bt.lock.Lock()
-	defer bt.lock.Unlock()
 
 	value := bt.tree.Delete(item)
 	if value == nil {
@@ -79,8 +69,7 @@ func (bt *BTree) Iterator(reverse bool) Iterator {
 	if bt.tree == nil {
 		return nil
 	}
-	bt.lock.RLock()
-	defer bt.lock.RUnlock()
+
 	return newBtreeIterator(bt, reverse)
 }
 

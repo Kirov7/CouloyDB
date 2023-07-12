@@ -21,11 +21,18 @@ import (
 	"time"
 )
 
+type DataStructureType uint8
+
+const (
+	String DataStructureType = iota
+)
+
 type DB struct {
 	options      Options
 	activityFile *data.DataFile
 	oldFile      map[uint32]*data.DataFile
 	memTable     meta.MemTable
+	indexLocks   map[DataStructureType]*sync.RWMutex
 	mu           *sync.RWMutex
 	txId         int64
 	isMerging    bool
@@ -61,15 +68,18 @@ func NewCouloyDB(opt Options) (*DB, error) {
 
 	// Init DB
 	db := &DB{
-		options:   opt,
-		oldFile:   make(map[uint32]*data.DataFile),
-		memTable:  meta.NewMemTable(opt.IndexType),
-		mu:        new(sync.RWMutex),
-		mergeChan: make(chan struct{}),
-		mergeDone: make(chan error),
-		flock:     fl,
-		wm:        newWatcherManager(),
+		options:    opt,
+		oldFile:    make(map[uint32]*data.DataFile),
+		memTable:   meta.NewMemTable(opt.IndexType),
+		indexLocks: make(map[DataStructureType]*sync.RWMutex),
+		mu:         new(sync.RWMutex),
+		mergeChan:  make(chan struct{}),
+		mergeDone:  make(chan error),
+		flock:      fl,
+		wm:         newWatcherManager(),
 	}
+
+	db.indexLocks[String] = &sync.RWMutex{}
 
 	db.ttl = newTTL(func(key string) error {
 		return db.Del([]byte(key))
@@ -115,6 +125,9 @@ func (db *DB) put(key, value []byte, duration time.Duration) error {
 		return public.ErrKeyIsControlChar
 	}
 
+	db.indexLocks[String].Lock()
+	defer db.indexLocks[String].Unlock()
+
 	var expiration int64
 	if duration != 0 {
 		expiration = time.Now().Add(duration).UnixNano()
@@ -150,6 +163,9 @@ func (db *DB) Get(key []byte) ([]byte, error) {
 		return nil, public.ErrKeyIsEmpty
 	}
 
+	db.indexLocks[String].RLock()
+	defer db.indexLocks[String].RUnlock()
+
 	if db.ttl.isExpired(string(key)) {
 		// if the key is expired, just return and don't delete the key now
 		return nil, public.ErrKeyNotFound
@@ -168,6 +184,10 @@ func (db *DB) Del(key []byte) error {
 		return public.ErrKeyIsEmpty
 	}
 	// Check if exist in memory memTable
+
+	db.indexLocks[String].Lock()
+	defer db.indexLocks[String].Unlock()
+
 	if pos := db.memTable.Get(key); pos == nil {
 		return nil
 	}
@@ -198,6 +218,8 @@ func (db *DB) IsExist(key []byte) (bool, error) {
 	if len(key) == 0 {
 		return false, public.ErrKeyIsEmpty
 	}
+	db.indexLocks[String].RLock()
+	defer db.indexLocks[String].RUnlock()
 	// Check if exist in memory memTable
 	if pos := db.memTable.Get(key); pos == nil {
 		return false, public.ErrKeyNotFound
@@ -206,11 +228,15 @@ func (db *DB) IsExist(key []byte) (bool, error) {
 }
 
 func (db *DB) Size() int {
+	db.indexLocks[String].RLock()
+	defer db.indexLocks[String].RUnlock()
 	return db.memTable.Count()
 }
 
 // ListKeys get all the key and return
 func (db *DB) ListKeys() [][]byte {
+	db.indexLocks[String].RLock()
+	defer db.indexLocks[String].RUnlock()
 	iterator := db.memTable.Iterator(false)
 	keys := make([][]byte, db.memTable.Count())
 	var idx int
@@ -224,6 +250,8 @@ func (db *DB) ListKeys() [][]byte {
 // Fold gets all the keys and executes the function passed in by the user.
 // Terminates the traversal when the function returns false
 func (db *DB) Fold(fn func(key []byte, value []byte) bool) error {
+	db.indexLocks[String].RLock()
+	defer db.indexLocks[String].RUnlock()
 	iterator := db.memTable.Iterator(false)
 	for iterator.Rewind(); iterator.Valid(); iterator.Next() {
 		value, err := db.getValueByPos(iterator.Value())
@@ -265,11 +293,13 @@ func (db *DB) Close() error {
 			panic(err)
 		}
 	}()
+
+	db.mu.Lock()
+	defer db.mu.Unlock()
+
 	if db.activityFile == nil {
 		return nil
 	}
-	db.mu.Lock()
-	defer db.mu.Unlock()
 
 	if err := db.activityFile.Close(); err != nil {
 		return err

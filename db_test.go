@@ -32,6 +32,7 @@ func TestNewCouloyDB(t *testing.T) {
 func TestDB_Put(t *testing.T) {
 	options := DefaultOptions()
 	options.DataFileSize = 8 * 1024 * 1024
+	options.SyncWrites = false
 	couloyDB, err := NewCouloyDB(options)
 	defer destroyCouloyDB(couloyDB)
 	assert.Nil(t, err)
@@ -66,6 +67,7 @@ func TestDB_Put(t *testing.T) {
 func TestDB_Get(t *testing.T) {
 	options := DefaultOptions()
 	options.DataFileSize = 8 * 1024 * 1024
+	options.SyncWrites = false
 	couloyDB, err := NewCouloyDB(options)
 	defer destroyCouloyDB(couloyDB)
 	assert.Nil(t, err)
@@ -104,9 +106,10 @@ func TestDB_Get(t *testing.T) {
 	assert.Equal(t, public.ErrKeyNotFound, err)
 }
 
-func TestDB_Put_Get_In_Parallel(t *testing.T) {
+func TestDB_Put_Get_Concurrency(t *testing.T) {
 	options := DefaultOptions()
 	options.DataFileSize = 8 * 1024 * 1024
+	options.SyncWrites = false
 	couloyDB, err := NewCouloyDB(options)
 	defer destroyCouloyDB(couloyDB)
 	assert.Nil(t, err)
@@ -180,6 +183,7 @@ func TestDB_Put_Get_In_Parallel(t *testing.T) {
 func TestDB_Del(t *testing.T) {
 	options := DefaultOptions()
 	options.DataFileSize = 8 * 1024 * 1024
+	options.SyncWrites = false
 	couloyDB, err := NewCouloyDB(options)
 	defer destroyCouloyDB(couloyDB)
 	assert.Nil(t, err)
@@ -209,6 +213,7 @@ func TestDB_Del(t *testing.T) {
 func TestDB_Reboot(t *testing.T) {
 	options := DefaultOptions()
 	options.DataFileSize = 8 * 1024 * 1024
+	options.SyncWrites = false
 	couloyDB, err := NewCouloyDB(options)
 	assert.Nil(t, err)
 	assert.NotNil(t, couloyDB)
