@@ -4,9 +4,17 @@ import (
 	"github.com/Kirov7/CouloyDB/public"
 	"github.com/Kirov7/CouloyDB/public/utils/bytex"
 	"github.com/stretchr/testify/assert"
+	"os"
 	"testing"
 	"time"
 )
+
+func init() {
+	err := os.RemoveAll(DefaultOptions().DirPath)
+	if err != nil {
+		panic(err.Error())
+	}
+}
 
 func TestDB_TTL(t *testing.T) {
 	options := DefaultOptions()
