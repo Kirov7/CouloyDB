@@ -21,12 +21,6 @@ import (
 	"time"
 )
 
-type DataStructureType uint8
-
-const (
-	String DataStructureType = iota
-)
-
 type Facade struct {
 	db *DB
 }
@@ -36,7 +30,7 @@ type DB struct {
 	activityFile *data.DataFile
 	oldFile      map[uint32]*data.DataFile
 	memTable     meta.MemTable
-	indexLocks   map[DataStructureType]*sync.RWMutex
+	indexLocks   map[data.DataStructureType]*sync.RWMutex
 	mu           *sync.RWMutex
 	txId         int64
 	isMerging    bool
@@ -75,7 +69,7 @@ func NewCouloyDB(opt Options) (*DB, error) {
 		options:    opt,
 		oldFile:    make(map[uint32]*data.DataFile),
 		memTable:   meta.NewMemTable(opt.IndexType),
-		indexLocks: make(map[DataStructureType]*sync.RWMutex),
+		indexLocks: make(map[data.DataStructureType]*sync.RWMutex),
 		mu:         new(sync.RWMutex),
 		mergeChan:  make(chan struct{}),
 		mergeDone:  make(chan error),
@@ -83,7 +77,7 @@ func NewCouloyDB(opt Options) (*DB, error) {
 		wm:         newWatcherManager(),
 	}
 
-	db.indexLocks[String] = &sync.RWMutex{}
+	db.indexLocks[data.String] = &sync.RWMutex{}
 
 	db.ttl = newTTL(func(key string) error {
 		return db.Del([]byte(key))
@@ -126,8 +120,8 @@ func (db *DB) put(key, value []byte, duration time.Duration) error {
 		return err
 	}
 
-	db.getIndexLockByType(String).Lock()
-	defer db.getIndexLockByType(String).Unlock()
+	db.getIndexLockByType(data.String).Lock()
+	defer db.getIndexLockByType(data.String).Unlock()
 
 	var expiration int64
 	if duration != 0 {
@@ -164,8 +158,8 @@ func (db *DB) Get(key []byte) ([]byte, error) {
 		return nil, public.ErrKeyIsEmpty
 	}
 
-	db.getIndexLockByType(String).RLock()
-	defer db.getIndexLockByType(String).RUnlock()
+	db.getIndexLockByType(data.String).RLock()
+	defer db.getIndexLockByType(data.String).RUnlock()
 
 	if db.ttl.isExpired(string(key)) {
 		// if the key is expired, just return and don't delete the key now
@@ -186,8 +180,8 @@ func (db *DB) Del(key []byte) error {
 	}
 	// Check if exist in memory memTable
 
-	db.getIndexLockByType(String).Lock()
-	defer db.getIndexLockByType(String).Unlock()
+	db.getIndexLockByType(data.String).Lock()
+	defer db.getIndexLockByType(data.String).Unlock()
 
 	if pos := db.memTable.Get(key); pos == nil {
 		return nil
@@ -219,8 +213,8 @@ func (db *DB) IsExist(key []byte) (bool, error) {
 	if len(key) == 0 {
 		return false, public.ErrKeyIsEmpty
 	}
-	db.getIndexLockByType(String).RLock()
-	defer db.getIndexLockByType(String).RUnlock()
+	db.getIndexLockByType(data.String).RLock()
+	defer db.getIndexLockByType(data.String).RUnlock()
 	// Check if exist in memory memTable
 	if pos := db.memTable.Get(key); pos == nil {
 		return false, public.ErrKeyNotFound
@@ -229,16 +223,16 @@ func (db *DB) IsExist(key []byte) (bool, error) {
 }
 
 func (db *DB) Size() int {
-	db.getIndexLockByType(String).RLock()
-	defer db.getIndexLockByType(String).RUnlock()
+	db.getIndexLockByType(data.String).RLock()
+	defer db.getIndexLockByType(data.String).RUnlock()
 	// may calculate expired key
 	return db.memTable.Count()
 }
 
 // ListKeys get all the key and return
 func (db *DB) ListKeys() [][]byte {
-	db.getIndexLockByType(String).RLock()
-	defer db.getIndexLockByType(String).RUnlock()
+	db.getIndexLockByType(data.String).RLock()
+	defer db.getIndexLockByType(data.String).RUnlock()
 	iterator := db.memTable.Iterator(false)
 	keys := make([][]byte, db.memTable.Count())
 	var idx int
@@ -252,8 +246,8 @@ func (db *DB) ListKeys() [][]byte {
 // Fold gets all the keys and executes the function passed in by the user.
 // Terminates the traversal when the function returns false
 func (db *DB) Fold(fn func(key []byte, value []byte) bool) error {
-	db.getIndexLockByType(String).RLock()
-	defer db.getIndexLockByType(String).RUnlock()
+	db.getIndexLockByType(data.String).RLock()
+	defer db.getIndexLockByType(data.String).RUnlock()
 	iterator := db.memTable.Iterator(false)
 	for iterator.Rewind(); iterator.Valid(); iterator.Next() {
 		value, err := db.getValueByPos(iterator.Value())
@@ -664,10 +658,10 @@ func (db *DB) Notify(key string, value []byte, entryType eventType) {
 	}
 }
 
-func (db *DB) getIndexLockByType(typ DataStructureType) *sync.RWMutex {
+func (db *DB) getIndexLockByType(typ data.DataStructureType) *sync.RWMutex {
 	switch typ {
-	case String:
-		return db.indexLocks[String]
+	case data.String:
+		return db.indexLocks[data.String]
 	}
 	return nil
 }

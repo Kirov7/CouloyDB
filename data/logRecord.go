@@ -14,6 +14,13 @@ const (
 	LogRecordTxnRollback
 	LogRecordTxnBegin
 )
+
+type DataStructureType uint8
+
+const (
+	String DataStructureType = iota
+)
+
 const (
 	// crc type keySize ValueSize
 	// 4 + 1 + 5 + 5 = 15
