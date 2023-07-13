@@ -49,7 +49,7 @@ func (txn *Txn) HGet(key, filed []byte) ([]byte, error) {
 		return nil, public.ErrKeyNotFound
 	}
 	if idx, ok := txn.db.hashIndex[string(key)]; ok {
-		if pos := idx.Get(key); pos != nil {
+		if pos := idx.Get(filed); pos != nil {
 			return txn.db.getValueByPos(pos)
 		}
 	}

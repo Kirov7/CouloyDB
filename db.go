@@ -499,12 +499,25 @@ func (db *DB) loadIndex(fids []int) error {
 	expirations := make(map[string]int64)
 
 	updateIndex := func(key []byte, log *data.LogRecord, pos *data.LogPos) {
-		if log.Type == data.LogRecordDeleted {
-			delete(expirations, string(key))
-			db.strIndex.Del(key)
-		} else {
-			expirations[string(key)] = log.Expiration
-			db.strIndex.Put(key, pos)
+		switch log.DSType {
+		case data.String:
+			if log.Type == data.LogRecordDeleted {
+				delete(expirations, string(key))
+				db.strIndex.Del(key)
+			} else {
+				expirations[string(key)] = log.Expiration
+				db.strIndex.Put(key, pos)
+			}
+		case data.Hash:
+			realKey, filed := decodeFiledKey(log.Key)
+			if _, ok := db.hashIndex[string(realKey)]; !ok {
+				db.hashIndex[string(realKey)] = meta.NewMemTable(db.options.IndexType)
+			}
+			if log.Type == data.LogRecordDeleted {
+				db.hashIndex[string(realKey)].Del(filed)
+			} else {
+				db.hashIndex[string(realKey)].Put(filed, pos)
+			}
 		}
 	}
 
