@@ -1,11 +1,39 @@
 package CouloyDB
 
 import (
+	"encoding/binary"
 	"github.com/Kirov7/CouloyDB/data"
+	"github.com/Kirov7/CouloyDB/meta"
 	"github.com/Kirov7/CouloyDB/public"
 )
 
 func (txn *Txn) HSet(key, filed, value []byte) error {
+	if err := checkKey(key); err != nil {
+		return err
+	}
+	if err := checkKey(filed); err != nil {
+		return err
+	}
+	if txn.readOnly {
+		return public.ErrUpdateInReadOnlyTxn
+	}
+	if _, ok := txn.db.hashIndex[string(key)]; !ok {
+		txn.db.hashIndex[string(key)] = meta.NewMemTable(txn.db.options.IndexType)
+	}
+	logRecord := &data.LogRecord{
+		Key:    encodeKeyWithTxId(encodeFiledKey(key, filed), txn.startTs),
+		Value:  value,
+		Type:   data.LogRecordNormal,
+		DSType: data.Hash,
+	}
+	pos, err := txn.db.appendLogRecordWithLock(logRecord)
+	if err != nil {
+		return err
+	}
+	if _, ok := txn.hashPendingWrites[string(key)]; !ok {
+		txn.hashPendingWrites[string(key)] = make(map[string]pendingWrite)
+	}
+	txn.hashPendingWrites[string(key)][string(filed)] = pendingWrite{typ: data.LogRecordNormal, LogPos: pos}
 	return nil
 }
 
@@ -29,6 +57,19 @@ func (txn *Txn) HGet(key, filed []byte) ([]byte, error) {
 }
 
 func (txn *Txn) HDel(key, filed []byte) error {
+	if txn.readOnly {
+		return public.ErrUpdateInReadOnlyTxn
+	}
+	logRecord := &data.LogRecord{
+		Key:    encodeKeyWithTxId(encodeFiledKey(key, filed), txn.startTs),
+		Type:   data.LogRecordDeleted,
+		DSType: data.Hash,
+	}
+	pos, err := txn.db.appendLogRecordWithLock(logRecord)
+	if err != nil {
+		return err
+	}
+	txn.hashPendingWrites[string(key)][string(filed)] = pendingWrite{typ: data.LogRecordDeleted, LogPos: pos}
 	return nil
 }
 
@@ -74,4 +115,27 @@ func (txn *Txn) HGetAll(key []byte) ([][]byte, [][]byte, error) {
 		values = append(values, v)
 	}
 	return keys, values, nil
+}
+
+func encodeFiledKey(key, filed []byte) []byte {
+	header := make([]byte, binary.MaxVarintLen64*2)
+	var index int
+	index += binary.PutVarint(header[index:], int64(len(key)))
+	index += binary.PutVarint(header[index:], int64(len(filed)))
+	length := len(key) + len(filed)
+	buf := make([]byte, length+index)
+	copy(buf[:index], header[:index])
+	copy(buf[index:index+len(key)], key)
+	copy(buf[index+len(key):], filed)
+	return buf
+}
+
+func decodeFiledKey(key []byte) ([]byte, []byte) {
+	var index int
+	keySize, i := binary.Varint(key[index:])
+	index += i
+	_, i = binary.Varint(key[index:])
+	index += i
+	sep := index + int(keySize)
+	return key[index:sep], key[sep:]
 }

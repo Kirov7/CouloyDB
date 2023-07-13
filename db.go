@@ -66,6 +66,7 @@ func NewCouloyDB(opt Options) (*DB, error) {
 		options:    opt,
 		oldFile:    make(map[uint32]*data.DataFile),
 		strIndex:   meta.NewMemTable(opt.IndexType),
+		hashIndex:  make(map[string]meta.MemTable),
 		indexLocks: make(map[data.DataStructureType]*sync.RWMutex),
 		mu:         new(sync.RWMutex),
 		mergeChan:  make(chan struct{}),

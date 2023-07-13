@@ -43,7 +43,7 @@ func (db *DB) initOracle() *oracle {
 }
 
 func (o *oracle) hasConflict(txn *Txn) bool {
-	if len(txn.strPendingWrites) == 0 {
+	if len(txn.strPendingWrites) == 0 && len(txn.hashPendingWrites) == 0 {
 		return false
 	}
 
@@ -58,6 +58,14 @@ func (o *oracle) hasConflict(txn *Txn) bool {
 		for key := range txn.strPendingWrites {
 			if _, has := committedTxn.strPendingWrites[key]; has {
 				return true
+			}
+		}
+
+		for key, pendingWrites := range txn.hashPendingWrites {
+			for filed := range pendingWrites {
+				if _, has := committedTxn.hashPendingWrites[key][filed]; has {
+					return true
+				}
 			}
 		}
 	}
@@ -261,6 +269,17 @@ func (txn *Txn) commit() error {
 			}
 			if pw.typ == data.LogRecordDeleted {
 				txn.db.strIndex.Del([]byte(key))
+			}
+		}
+
+		for key, pendingWrites := range txn.hashPendingWrites {
+			for filed, pw := range pendingWrites {
+				if pw.typ == data.LogRecordNormal {
+					txn.db.hashIndex[key].Put([]byte(filed), pw.LogPos)
+				}
+				if pw.typ == data.LogRecordDeleted {
+					txn.db.hashIndex[key].Del([]byte(filed))
+				}
 			}
 		}
 		// the real commit
