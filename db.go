@@ -26,6 +26,7 @@ type DB struct {
 	activityFile *data.DataFile
 	oldFile      map[uint32]*data.DataFile
 	strIndex     meta.MemTable
+	hashIndex    map[string]meta.MemTable
 	indexLocks   map[data.DataStructureType]*sync.RWMutex
 	mu           *sync.RWMutex
 	txId         int64

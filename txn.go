@@ -153,16 +153,18 @@ type Txn struct {
 
 	// The data written is stored temporarily in pendingWrites instead of memtable
 	// Record operations on each data structure separately
-	strPendingWrites map[string]pendingWrite
+	strPendingWrites  map[string]pendingWrite
+	hashPendingWrites map[string]map[string]pendingWrite // key to field to pendingWrite
 }
 
 func newTxn(readOnly bool, db *DB, isolationLevel IsolationLevel) *Txn {
 
 	return &Txn{
-		readOnly:         readOnly,
-		db:               db,
-		isolationLevel:   isolationLevel,
-		strPendingWrites: make(map[string]pendingWrite),
+		readOnly:          readOnly,
+		db:                db,
+		isolationLevel:    isolationLevel,
+		strPendingWrites:  make(map[string]pendingWrite),
+		hashPendingWrites: make(map[string]map[string]pendingWrite),
 	}
 }
 
