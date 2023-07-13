@@ -52,11 +52,14 @@ func (o *oracle) hasConflict(txn *Txn) bool {
 		if committedTxn.commitTs <= txn.startTs {
 			continue
 		}
+
 		// if the startTs is less than the commitTs of the committed transaction
 		// possible transaction conflicts (especially dirty writing)
-		for k := range txn.pendingWrites {
-			if _, has := committedTxn.pendingWrites[k]; has {
-				return true
+		for dsType, pendingWrites := range txn.pendingWrites {
+			for key := range pendingWrites {
+				if _, has := committedTxn.pendingWrites[dsType][key]; has {
+					return true
+				}
 			}
 		}
 	}
