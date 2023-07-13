@@ -118,3 +118,49 @@ func TestTxn_HGetAll(t *testing.T) {
 		return nil
 	})
 }
+
+func TestTxn_Hash_Restart(t *testing.T) {
+	db, err := NewCouloyDB(DefaultOptions())
+	assert.Nil(t, err)
+	assert.NotNil(t, db)
+
+	err = db.SerialTransaction(false, func(txn *Txn) error {
+		err = txn.HSet(bytex.GetTestKey(0), bytex.GetTestKey(0), bytex.GetTestKey(0))
+		assert.Nil(t, err)
+
+		err = txn.HSet(bytex.GetTestKey(1), bytex.GetTestKey(1), bytex.GetTestKey(1))
+		assert.Nil(t, err)
+
+		err = txn.HSet(bytex.GetTestKey(1), bytex.GetTestKey(2), bytex.GetTestKey(2))
+		assert.Nil(t, err)
+
+		return err
+	})
+
+	err = db.Close()
+	assert.Nil(t, err)
+
+	db, err = NewCouloyDB(DefaultOptions())
+	assert.Nil(t, err)
+	assert.NotNil(t, db)
+
+	err = db.SerialTransaction(true, func(txn *Txn) error {
+		value, err := txn.HGet(bytex.GetTestKey(0), bytex.GetTestKey(0))
+		assert.Nil(t, err)
+		assert.Equal(t, bytex.GetTestKey(0), value)
+
+		value, err = txn.HGet(bytex.GetTestKey(1), bytex.GetTestKey(1))
+		assert.Nil(t, err)
+		assert.Equal(t, bytex.GetTestKey(1), value)
+
+		value, err = txn.HGet(bytex.GetTestKey(1), bytex.GetTestKey(2))
+		assert.Nil(t, err)
+		assert.Equal(t, bytex.GetTestKey(2), value)
+
+		return err
+	})
+
+	assert.Nil(t, err)
+
+	destroyCouloyDB(db)
+}
