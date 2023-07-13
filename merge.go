@@ -99,7 +99,7 @@ func (db *DB) merge() error {
 
 			// parse and get the real key
 			realKey, _ := parseLogRecordKey(logRecord.Key)
-			logRecordPos := db.memTable.Get(realKey)
+			logRecordPos := db.strIndex.Get(realKey)
 			// compare with the memTable, if the already exist in memTable then rewrite it
 			if logRecordPos != nil && logRecordPos.Fid == oldFile.FileId && logRecordPos.Offset == offset {
 				// clean the txId mark
@@ -256,7 +256,7 @@ func (db *DB) loadIndexFromHintFile() error {
 
 		// get the real pos index
 		pos := data.DecodeLogRecordPos(logRecord.Value)
-		db.memTable.Put(logRecord.Key, pos)
+		db.strIndex.Put(logRecord.Key, pos)
 		offset += size
 	}
 	return nil
