@@ -43,7 +43,7 @@ func (db *DB) initOracle() *oracle {
 }
 
 func (o *oracle) hasConflict(txn *Txn) bool {
-	if len(txn.pendingWrites) == 0 {
+	if len(txn.strPendingWrites) == 0 {
 		return false
 	}
 
@@ -55,11 +55,9 @@ func (o *oracle) hasConflict(txn *Txn) bool {
 
 		// if the startTs is less than the commitTs of the committed transaction
 		// possible transaction conflicts (especially dirty writing)
-		for dsType, pendingWrites := range txn.pendingWrites {
-			for key := range pendingWrites {
-				if _, has := committedTxn.pendingWrites[dsType][key]; has {
-					return true
-				}
+		for key := range txn.strPendingWrites {
+			if _, has := committedTxn.strPendingWrites[key]; has {
+				return true
 			}
 		}
 	}
@@ -155,17 +153,16 @@ type Txn struct {
 
 	// The data written is stored temporarily in pendingWrites instead of memtable
 	// Record operations on each data structure separately
-	pendingWrites map[data.DataStructureType]map[string]pendingWrite
+	strPendingWrites map[string]pendingWrite
 }
 
 func newTxn(readOnly bool, db *DB, isolationLevel IsolationLevel) *Txn {
-	pendingWrites := make(map[data.DataStructureType]map[string]pendingWrite)
-	pendingWrites[data.String] = make(map[string]pendingWrite)
+
 	return &Txn{
-		readOnly:       readOnly,
-		db:             db,
-		isolationLevel: isolationLevel,
-		pendingWrites:  pendingWrites,
+		readOnly:         readOnly,
+		db:               db,
+		isolationLevel:   isolationLevel,
+		strPendingWrites: make(map[string]pendingWrite),
 	}
 }
 
@@ -256,17 +253,12 @@ func (txn *Txn) commit() error {
 		}
 
 		// traverse the operations done by the transaction on each data structure
-		for dsType, pendingWrites := range txn.pendingWrites {
-			for key, pendingWrite := range pendingWrites {
-				switch dsType {
-				case data.String:
-					if pendingWrite.typ == data.LogRecordNormal {
-						txn.db.strIndex.Put([]byte(key), pendingWrite.LogPos)
-					}
-					if pendingWrite.typ == data.LogRecordDeleted {
-						txn.db.strIndex.Del([]byte(key))
-					}
-				}
+		for key, pw := range txn.strPendingWrites {
+			if pw.typ == data.LogRecordNormal {
+				txn.db.strIndex.Put([]byte(key), pw.LogPos)
+			}
+			if pw.typ == data.LogRecordDeleted {
+				txn.db.strIndex.Del([]byte(key))
 			}
 		}
 		// the real commit
@@ -299,7 +291,7 @@ func (txn *Txn) Get(key []byte) ([]byte, error) {
 	if len(key) == 0 {
 		return nil, public.ErrKeyIsEmpty
 	}
-	if pos, ok := txn.pendingWrites[data.String][string(key)]; ok {
+	if pos, ok := txn.strPendingWrites[string(key)]; ok {
 		// If the key is found, check to see if it has been deleted
 		if pos.typ != data.LogRecordDeleted {
 			v, err := txn.db.getValueByPos(pos.LogPos)
@@ -334,7 +326,7 @@ func (txn *Txn) Set(key []byte, value []byte) error {
 	if err != nil {
 		return err
 	}
-	txn.pendingWrites[data.String][string(key)] = pendingWrite{typ: data.LogRecordNormal, LogPos: pos}
+	txn.strPendingWrites[string(key)] = pendingWrite{typ: data.LogRecordNormal, LogPos: pos}
 	return nil
 }
 
@@ -352,7 +344,7 @@ func (txn *Txn) Del(key []byte) error {
 	if err != nil {
 		return err
 	}
-	txn.pendingWrites[data.String][string(key)] = pendingWrite{typ: data.LogRecordDeleted, LogPos: pos}
+	txn.strPendingWrites[string(key)] = pendingWrite{typ: data.LogRecordDeleted, LogPos: pos}
 	return nil
 }
 
@@ -438,7 +430,7 @@ func (txn *Txn) incrOrDecr(key []byte, isIncr bool) (int, error) {
 }
 
 func (txn *Txn) Exist(key []byte) bool {
-	if pos, ok := txn.pendingWrites[data.String][string(key)]; ok {
+	if pos, ok := txn.strPendingWrites[string(key)]; ok {
 		if pos.typ != data.LogRecordDeleted {
 			return true
 		}
