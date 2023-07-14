@@ -137,6 +137,8 @@ func TestTxn_Hash_Restart(t *testing.T) {
 		err = txn.HSet(bytex.GetTestKey(1), bytex.GetTestKey(2), bytex.GetTestKey(2))
 		assert.Nil(t, err)
 
+		err = txn.HDel(bytex.GetTestKey(1), bytex.GetTestKey(2))
+
 		return err
 	})
 
@@ -157,13 +159,11 @@ func TestTxn_Hash_Restart(t *testing.T) {
 		assert.Equal(t, bytex.GetTestKey(1), value)
 
 		value, err = txn.HGet(bytex.GetTestKey(1), bytex.GetTestKey(2))
-		assert.Nil(t, err)
-		assert.Equal(t, bytex.GetTestKey(2), value)
+		assert.NotNil(t, err)
+		assert.Equal(t, public.ErrKeyNotFound, err)
 
 		return err
 	})
-
-	assert.Nil(t, err)
 
 	destroyCouloyDB(db)
 }
