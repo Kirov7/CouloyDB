@@ -62,8 +62,8 @@ func (o *oracle) hasConflict(txn *Txn) bool {
 		}
 
 		for key, pendingWrites := range txn.hashPendingWrites {
-			for filed := range pendingWrites {
-				if _, has := committedTxn.hashPendingWrites[key][filed]; has {
+			for field := range pendingWrites {
+				if _, has := committedTxn.hashPendingWrites[key][field]; has {
 					return true
 				}
 			}
@@ -273,12 +273,12 @@ func (txn *Txn) commit() error {
 		}
 
 		for key, pendingWrites := range txn.hashPendingWrites {
-			for filed, pw := range pendingWrites {
+			for field, pw := range pendingWrites {
 				if pw.typ == data.LogRecordNormal {
-					txn.db.hashIndex[key].Put([]byte(filed), pw.LogPos)
+					txn.db.hashIndex[key].Put([]byte(field), pw.LogPos)
 				}
 				if pw.typ == data.LogRecordDeleted {
-					txn.db.hashIndex[key].Del([]byte(filed))
+					txn.db.hashIndex[key].Del([]byte(field))
 				}
 			}
 		}

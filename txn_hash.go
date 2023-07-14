@@ -7,11 +7,11 @@ import (
 	"github.com/Kirov7/CouloyDB/public"
 )
 
-func (txn *Txn) HSet(key, filed, value []byte) error {
+func (txn *Txn) HSet(key, field, value []byte) error {
 	if err := checkKey(key); err != nil {
 		return err
 	}
-	if err := checkKey(filed); err != nil {
+	if err := checkKey(field); err != nil {
 		return err
 	}
 	if txn.readOnly {
@@ -21,7 +21,7 @@ func (txn *Txn) HSet(key, filed, value []byte) error {
 		txn.db.hashIndex[string(key)] = meta.NewMemTable(txn.db.options.IndexType)
 	}
 	logRecord := &data.LogRecord{
-		Key:    encodeKeyWithTxId(encodeFiledKey(key, filed), txn.startTs),
+		Key:    encodeKeyWithTxId(encodeFiledKey(key, field), txn.startTs),
 		Value:  value,
 		Type:   data.LogRecordNormal,
 		DSType: data.Hash,
@@ -33,12 +33,12 @@ func (txn *Txn) HSet(key, filed, value []byte) error {
 	if _, ok := txn.hashPendingWrites[string(key)]; !ok {
 		txn.hashPendingWrites[string(key)] = make(map[string]pendingWrite)
 	}
-	txn.hashPendingWrites[string(key)][string(filed)] = pendingWrite{typ: data.LogRecordNormal, LogPos: pos}
+	txn.hashPendingWrites[string(key)][string(field)] = pendingWrite{typ: data.LogRecordNormal, LogPos: pos}
 	return nil
 }
 
-func (txn *Txn) HGet(key, filed []byte) ([]byte, error) {
-	if pw, ok := txn.hashPendingWrites[string(key)][string(filed)]; ok {
+func (txn *Txn) HGet(key, field []byte) ([]byte, error) {
+	if pw, ok := txn.hashPendingWrites[string(key)][string(field)]; ok {
 		if pw.typ != data.LogRecordDeleted {
 			v, err := txn.db.getValueByPos(pw.LogPos)
 			if err != nil {
@@ -49,19 +49,19 @@ func (txn *Txn) HGet(key, filed []byte) ([]byte, error) {
 		return nil, public.ErrKeyNotFound
 	}
 	if idx, ok := txn.db.hashIndex[string(key)]; ok {
-		if pos := idx.Get(filed); pos != nil {
+		if pos := idx.Get(field); pos != nil {
 			return txn.db.getValueByPos(pos)
 		}
 	}
 	return nil, public.ErrKeyNotFound
 }
 
-func (txn *Txn) HDel(key, filed []byte) error {
+func (txn *Txn) HDel(key, field []byte) error {
 	if txn.readOnly {
 		return public.ErrUpdateInReadOnlyTxn
 	}
 	logRecord := &data.LogRecord{
-		Key:    encodeKeyWithTxId(encodeFiledKey(key, filed), txn.startTs),
+		Key:    encodeKeyWithTxId(encodeFiledKey(key, field), txn.startTs),
 		Type:   data.LogRecordDeleted,
 		DSType: data.Hash,
 	}
@@ -69,12 +69,12 @@ func (txn *Txn) HDel(key, filed []byte) error {
 	if err != nil {
 		return err
 	}
-	txn.hashPendingWrites[string(key)][string(filed)] = pendingWrite{typ: data.LogRecordDeleted, LogPos: pos}
+	txn.hashPendingWrites[string(key)][string(field)] = pendingWrite{typ: data.LogRecordDeleted, LogPos: pos}
 	return nil
 }
 
-func (txn *Txn) HExist(key, filed []byte) bool {
-	if pw, ok := txn.hashPendingWrites[string(key)][string(filed)]; ok {
+func (txn *Txn) HExist(key, field []byte) bool {
+	if pw, ok := txn.hashPendingWrites[string(key)][string(field)]; ok {
 		if pw.typ != data.LogRecordDeleted {
 			return true
 		}
@@ -117,16 +117,16 @@ func (txn *Txn) HGetAll(key []byte) ([][]byte, [][]byte, error) {
 	return keys, values, nil
 }
 
-func encodeFiledKey(key, filed []byte) []byte {
+func encodeFiledKey(key, field []byte) []byte {
 	header := make([]byte, binary.MaxVarintLen64*2)
 	var index int
 	index += binary.PutVarint(header[index:], int64(len(key)))
-	index += binary.PutVarint(header[index:], int64(len(filed)))
-	length := len(key) + len(filed)
+	index += binary.PutVarint(header[index:], int64(len(field)))
+	length := len(key) + len(field)
 	buf := make([]byte, length+index)
 	copy(buf[:index], header[:index])
 	copy(buf[index:index+len(key)], key)
-	copy(buf[index+len(key):], filed)
+	copy(buf[index+len(key):], field)
 	return buf
 }
 
