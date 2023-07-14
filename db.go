@@ -25,8 +25,7 @@ type DB struct {
 	options      Options
 	activityFile *data.DataFile
 	oldFile      map[uint32]*data.DataFile
-	strIndex     meta.MemTable
-	hashIndex    map[string]meta.MemTable
+	index        *index
 	indexLocks   map[data.DataStructureType]*sync.RWMutex
 	mu           *sync.RWMutex
 	txId         int64
@@ -63,10 +62,12 @@ func NewCouloyDB(opt Options) (*DB, error) {
 
 	// Init DB
 	db := &DB{
-		options:    opt,
-		oldFile:    make(map[uint32]*data.DataFile),
-		strIndex:   meta.NewMemTable(opt.IndexType),
-		hashIndex:  make(map[string]meta.MemTable),
+		options: opt,
+		oldFile: make(map[uint32]*data.DataFile),
+		index: &index{
+			hashIndex: make(map[string]meta.MemTable),
+			strIndex:  meta.NewMemTable(opt.IndexType),
+		},
 		indexLocks: make(map[data.DataStructureType]*sync.RWMutex),
 		mu:         new(sync.RWMutex),
 		mergeChan:  make(chan struct{}),
@@ -146,7 +147,7 @@ func (db *DB) put(key, value []byte, duration time.Duration) error {
 
 	db.Notify(string(key), value, PutEvent)
 
-	if ok := db.strIndex.Put(key, pos); !ok {
+	if ok := db.index.getStrIndex().Put(key, pos); !ok {
 		return public.ErrUpdateIndexFailed
 	}
 	return nil
@@ -165,7 +166,7 @@ func (db *DB) Get(key []byte) ([]byte, error) {
 		return nil, public.ErrKeyNotFound
 	}
 
-	pos := db.strIndex.Get(key)
+	pos := db.index.getStrIndex().Get(key)
 	if pos == nil {
 		return nil, public.ErrKeyNotFound
 	}
@@ -182,7 +183,7 @@ func (db *DB) Del(key []byte) error {
 	db.getIndexLockByType(data.String).Lock()
 	defer db.getIndexLockByType(data.String).Unlock()
 
-	if pos := db.strIndex.Get(key); pos == nil {
+	if pos := db.index.getStrIndex().Get(key); pos == nil {
 		return nil
 	}
 
@@ -202,7 +203,7 @@ func (db *DB) Del(key []byte) error {
 	db.Notify(string(key), nil, DelEvent)
 
 	// Delete key in memory memTable
-	if ok := db.strIndex.Del(key); !ok {
+	if ok := db.index.getStrIndex().Del(key); !ok {
 		return public.ErrUpdateIndexFailed
 	}
 	return nil
@@ -215,7 +216,7 @@ func (db *DB) IsExist(key []byte) (bool, error) {
 	db.getIndexLockByType(data.String).RLock()
 	defer db.getIndexLockByType(data.String).RUnlock()
 	// Check if exist in memory memTable
-	if pos := db.strIndex.Get(key); pos == nil {
+	if pos := db.index.getStrIndex().Get(key); pos == nil {
 		return false, public.ErrKeyNotFound
 	}
 	return true, nil
@@ -225,15 +226,15 @@ func (db *DB) Size() int {
 	db.getIndexLockByType(data.String).RLock()
 	defer db.getIndexLockByType(data.String).RUnlock()
 	// may calculate expired key
-	return db.strIndex.Count()
+	return db.index.getStrIndex().Count()
 }
 
 // ListKeys get all the key and return
 func (db *DB) ListKeys() [][]byte {
 	db.getIndexLockByType(data.String).RLock()
 	defer db.getIndexLockByType(data.String).RUnlock()
-	iterator := db.strIndex.Iterator(false)
-	keys := make([][]byte, db.strIndex.Count())
+	iterator := db.index.getStrIndex().Iterator(false)
+	keys := make([][]byte, db.index.getStrIndex().Count())
 	var idx int
 	for iterator.Rewind(); iterator.Valid(); iterator.Next() {
 		keys[idx] = iterator.Key()
@@ -247,7 +248,7 @@ func (db *DB) ListKeys() [][]byte {
 func (db *DB) Fold(fn func(key []byte, value []byte) bool) error {
 	db.getIndexLockByType(data.String).RLock()
 	defer db.getIndexLockByType(data.String).RUnlock()
-	iterator := db.strIndex.Iterator(false)
+	iterator := db.index.getStrIndex().Iterator(false)
 	for iterator.Rewind(); iterator.Valid(); iterator.Next() {
 		value, err := db.getValueByPos(iterator.Value())
 		if err != nil {
@@ -278,7 +279,8 @@ func (db *DB) Clear() error {
 		return public.ErrDirOccupied
 	}
 
-	db.strIndex = meta.NewMemTable(db.options.IndexType)
+	db.index.strIndex = meta.NewMemTable(db.options.IndexType)
+	db.index.hashIndex = make(map[string]meta.MemTable)
 	return nil
 }
 
@@ -503,20 +505,25 @@ func (db *DB) loadIndex(fids []int) error {
 		case data.String:
 			if log.Type == data.LogRecordDeleted {
 				delete(expirations, string(key))
-				db.strIndex.Del(key)
+				db.index.getStrIndex().Del(key)
 			} else {
 				expirations[string(key)] = log.Expiration
-				db.strIndex.Put(key, pos)
+				db.index.getStrIndex().Put(key, pos)
 			}
 		case data.Hash:
-			realKey, filed := decodeFieldKey(log.Key)
-			if _, ok := db.hashIndex[string(realKey)]; !ok {
-				db.hashIndex[string(realKey)] = meta.NewMemTable(db.options.IndexType)
+			realKey, field := decodeFieldKey(log.Key)
+			var (
+				idx meta.MemTable
+				ok  bool
+			)
+			if idx, ok = db.index.getHashIndex(string(realKey)); !ok {
+				db.index.setHashIndex(string(realKey), meta.NewMemTable(db.options.IndexType))
+				idx, _ = db.index.getHashIndex(string(realKey))
 			}
 			if log.Type == data.LogRecordDeleted {
-				db.hashIndex[string(realKey)].Del(filed)
+				idx.Del(field)
 			} else {
-				db.hashIndex[string(realKey)].Put(filed, pos)
+				idx.Put(field, pos)
 			}
 		}
 	}

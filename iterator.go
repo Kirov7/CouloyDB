@@ -12,7 +12,7 @@ type Iterator struct {
 }
 
 func (db *DB) NewIterator(options IteratorOptions) *Iterator {
-	iterator := db.strIndex.Iterator(options.Reverse)
+	iterator := db.index.getStrIndex().Iterator(options.Reverse)
 	return &Iterator{
 		IndexIterator: iterator,
 		db:            db,

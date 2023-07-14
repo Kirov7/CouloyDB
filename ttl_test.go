@@ -76,7 +76,10 @@ func TestDB_TTL_Restart(t *testing.T) {
 	assert.Nil(t, err)
 	assert.NotNil(t, db)
 
-	defer destroyCouloyDB(db)
+	defer func() {
+		time.Sleep(1 * time.Second)
+		destroyCouloyDB(db)
+	}()
 
 	// after restart, the previously set expiration time is still valid
 	value, err = db.Get(bytex.GetTestKey(0))

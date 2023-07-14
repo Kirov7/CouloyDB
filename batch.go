@@ -44,7 +44,7 @@ func (wb *WriteBatch) Del(key []byte) error {
 	wb.mu.Lock()
 	defer wb.mu.Unlock()
 
-	recordPos := wb.db.strIndex.Get(key)
+	recordPos := wb.db.index.getStrIndex().Get(key)
 	if recordPos == nil {
 		if wb.pendingWrite[string(key)] != nil {
 			delete(wb.pendingWrite, string(key))
@@ -105,10 +105,10 @@ func (wb *WriteBatch) Commit() error {
 	for _, record := range wb.pendingWrite {
 		pos := positions[string(record.Key)]
 		if record.Type == data.LogRecordNormal {
-			wb.db.strIndex.Put(record.Key, pos)
+			wb.db.index.getStrIndex().Put(record.Key, pos)
 		}
 		if record.Type == data.LogRecordDeleted {
-			wb.db.strIndex.Del(record.Key)
+			wb.db.index.getStrIndex().Del(record.Key)
 		}
 	}
 

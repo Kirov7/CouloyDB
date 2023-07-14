@@ -102,10 +102,12 @@ func (db *DB) merge() error {
 			var logRecordPos *data.LogPos
 			switch logRecord.DSType {
 			case data.String:
-				logRecordPos = db.strIndex.Get(realKey)
+				logRecordPos = db.index.getStrIndex().Get(realKey)
 			case data.Hash:
 				realKey, field := decodeFieldKey(realKey)
-				logRecordPos = db.hashIndex[string(realKey)].Get(field)
+				if idx, ok := db.index.getHashIndex(string(realKey)); ok {
+					logRecordPos = idx.Get(field)
+				}
 			}
 			// compare with the memTable, if the already exist in memTable then rewrite it
 			if logRecordPos != nil && logRecordPos.Fid == oldFile.FileId && logRecordPos.Offset == offset {
@@ -263,7 +265,7 @@ func (db *DB) loadIndexFromHintFile() error {
 
 		// get the real pos index
 		pos := data.DecodeLogRecordPos(logRecord.Value)
-		db.strIndex.Put(logRecord.Key, pos)
+		db.index.getStrIndex().Put(logRecord.Key, pos)
 		offset += size
 	}
 	return nil

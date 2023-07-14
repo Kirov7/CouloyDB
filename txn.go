@@ -263,25 +263,9 @@ func (txn *Txn) commit() error {
 		}
 
 		// traverse the operations done by the transaction on each data structure
-		for key, pw := range txn.strPendingWrites {
-			if pw.typ == data.LogRecordNormal {
-				txn.db.strIndex.Put([]byte(key), pw.LogPos)
-			}
-			if pw.typ == data.LogRecordDeleted {
-				txn.db.strIndex.Del([]byte(key))
-			}
-		}
+		txn.setStrIndex()
+		txn.setHashIndex()
 
-		for key, pendingWrites := range txn.hashPendingWrites {
-			for field, pw := range pendingWrites {
-				if pw.typ == data.LogRecordNormal {
-					txn.db.hashIndex[key].Put([]byte(field), pw.LogPos)
-				}
-				if pw.typ == data.LogRecordDeleted {
-					txn.db.hashIndex[key].Del([]byte(field))
-				}
-			}
-		}
 		// the real commit
 		txn.db.oracle.newCommit(txn)
 		//fmt.Printf("=== %d === commit\n", id(txn.startTs))
@@ -307,6 +291,31 @@ func (txn *Txn) rollback() {
 	}
 }
 
+func (txn *Txn) setStrIndex() {
+	for key, pw := range txn.strPendingWrites {
+		if pw.typ == data.LogRecordNormal {
+			txn.db.index.getStrIndex().Put([]byte(key), pw.LogPos)
+		}
+		if pw.typ == data.LogRecordDeleted {
+			txn.db.index.getStrIndex().Del([]byte(key))
+		}
+	}
+}
+
+func (txn *Txn) setHashIndex() {
+	for key, pendingWrites := range txn.hashPendingWrites {
+		idx, _ := txn.db.index.getHashIndex(key)
+		for field, pw := range pendingWrites {
+			if pw.typ == data.LogRecordNormal {
+				idx.Put([]byte(field), pw.LogPos)
+			}
+			if pw.typ == data.LogRecordDeleted {
+				idx.Del([]byte(field))
+			}
+		}
+	}
+}
+
 // Get the key first in pendingWrites, if not then in db
 func (txn *Txn) Get(key []byte) ([]byte, error) {
 	if len(key) == 0 {
@@ -324,7 +333,7 @@ func (txn *Txn) Get(key []byte) ([]byte, error) {
 		return nil, public.ErrKeyNotFound
 	}
 
-	pos := txn.db.strIndex.Get(key)
+	pos := txn.db.index.getStrIndex().Get(key)
 	if pos == nil {
 		return nil, public.ErrKeyNotFound
 	}
@@ -458,7 +467,7 @@ func (txn *Txn) Exist(key []byte) bool {
 		return false
 	}
 
-	if pos := txn.db.strIndex.Get(key); pos != nil {
+	if pos := txn.db.index.getStrIndex(); pos != nil {
 		return true
 	}
 

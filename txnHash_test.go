@@ -59,6 +59,14 @@ func TestTxn_HDel(t *testing.T) {
 		assert.NotNil(t, err)
 		assert.Equal(t, public.ErrKeyNotFound, err)
 
+		err = txn.HDel(bytex.GetTestKey(0), bytex.GetTestKey(1))
+		assert.NotNil(t, err)
+		assert.Equal(t, public.ErrKeyNotFound, err)
+
+		err = txn.HDel(bytex.GetTestKey(1), bytex.GetTestKey(1))
+		assert.NotNil(t, err)
+		assert.Equal(t, public.ErrKeyNotFound, err)
+
 		return nil
 	})
 
@@ -81,7 +89,7 @@ func TestTxn_HExist(t *testing.T) {
 		err = txn.HDel(bytex.GetTestKey(0), bytex.GetTestKey(0))
 		assert.Nil(t, err)
 
-		exist = txn.Exist(bytex.GetTestKey(0))
+		exist = txn.HExist(bytex.GetTestKey(0), bytex.GetTestKey(0))
 		assert.False(t, exist)
 
 		return nil

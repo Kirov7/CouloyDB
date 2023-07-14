@@ -14,22 +14,27 @@ func (txn *Txn) HSet(key, field, value []byte) error {
 	if err := checkKey(field); err != nil {
 		return err
 	}
+
 	if txn.readOnly {
 		return public.ErrUpdateInReadOnlyTxn
 	}
-	if _, ok := txn.db.hashIndex[string(key)]; !ok {
-		txn.db.hashIndex[string(key)] = meta.NewMemTable(txn.db.options.IndexType)
+
+	if _, ok := txn.db.index.getHashIndex(string(key)); !ok {
+		txn.db.index.setHashIndex(string(key), meta.NewMemTable(txn.db.options.IndexType))
 	}
+
 	logRecord := &data.LogRecord{
 		Key:    encodeKeyWithTxId(encodeFieldKey(key, field), txn.startTs),
 		Value:  value,
 		Type:   data.LogRecordNormal,
 		DSType: data.Hash,
 	}
+
 	pos, err := txn.db.appendLogRecordWithLock(logRecord)
 	if err != nil {
 		return err
 	}
+
 	if _, ok := txn.hashPendingWrites[string(key)]; !ok {
 		txn.hashPendingWrites[string(key)] = make(map[string]pendingWrite)
 	}
@@ -48,7 +53,8 @@ func (txn *Txn) HGet(key, field []byte) ([]byte, error) {
 		}
 		return nil, public.ErrKeyNotFound
 	}
-	if idx, ok := txn.db.hashIndex[string(key)]; ok {
+
+	if idx, ok := txn.db.index.getHashIndex(string(key)); ok {
 		if pos := idx.Get(field); pos != nil {
 			return txn.db.getValueByPos(pos)
 		}
@@ -60,6 +66,21 @@ func (txn *Txn) HDel(key, field []byte) error {
 	if txn.readOnly {
 		return public.ErrUpdateInReadOnlyTxn
 	}
+
+	if pw, ok := txn.hashPendingWrites[string(key)][string(field)]; ok {
+		if pw.typ == data.LogRecordDeleted {
+			return public.ErrKeyNotFound
+		}
+	} else {
+		if idx, ok := txn.db.index.getHashIndex(string(key)); !ok {
+			return public.ErrKeyNotFound
+		} else {
+			if pos := idx.Get(field); pos == nil {
+				return public.ErrKeyNotFound
+			}
+		}
+	}
+
 	logRecord := &data.LogRecord{
 		Key:    encodeKeyWithTxId(encodeFieldKey(key, field), txn.startTs),
 		Type:   data.LogRecordDeleted,
@@ -69,6 +90,7 @@ func (txn *Txn) HDel(key, field []byte) error {
 	if err != nil {
 		return err
 	}
+
 	txn.hashPendingWrites[string(key)][string(field)] = pendingWrite{typ: data.LogRecordDeleted, LogPos: pos}
 	return nil
 }
@@ -80,8 +102,9 @@ func (txn *Txn) HExist(key, field []byte) bool {
 		}
 		return false
 	}
-	if idx, ok := txn.db.hashIndex[string(key)]; ok {
-		if pos := idx.Get(key); pos != nil {
+
+	if idx, ok := txn.db.index.getHashIndex(string(key)); ok {
+		if pos := idx.Get(field); pos != nil {
 			return true
 		}
 	}
@@ -91,7 +114,12 @@ func (txn *Txn) HExist(key, field []byte) bool {
 func (txn *Txn) HGetAll(key []byte) ([][]byte, [][]byte, error) {
 	keys, values := make([][]byte, 0), make([][]byte, 0)
 
-	hash := txn.db.hashIndex[string(key)]
+	hash, ok := txn.db.index.getHashIndex(string(key))
+
+	if !ok {
+		return nil, nil, public.ErrKeyNotFound
+	}
+
 	iterator := hash.Iterator(false)
 
 	for iterator.Rewind(); iterator.Valid(); iterator.Next() {
