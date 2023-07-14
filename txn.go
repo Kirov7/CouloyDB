@@ -4,6 +4,7 @@ import (
 	"container/heap"
 	"github.com/Kirov7/CouloyDB/data"
 	"github.com/Kirov7/CouloyDB/public"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -42,7 +43,7 @@ func (db *DB) initOracle() *oracle {
 }
 
 func (o *oracle) hasConflict(txn *Txn) bool {
-	if len(txn.pendingWrites) == 0 {
+	if len(txn.strPendingWrites) == 0 && len(txn.hashPendingWrites) == 0 {
 		return false
 	}
 
@@ -51,11 +52,20 @@ func (o *oracle) hasConflict(txn *Txn) bool {
 		if committedTxn.commitTs <= txn.startTs {
 			continue
 		}
+
 		// if the startTs is less than the commitTs of the committed transaction
 		// possible transaction conflicts (especially dirty writing)
-		for k := range txn.pendingWrites {
-			if _, has := committedTxn.pendingWrites[k]; has {
+		for key := range txn.strPendingWrites {
+			if _, has := committedTxn.strPendingWrites[key]; has {
 				return true
+			}
+		}
+
+		for key, pendingWrites := range txn.hashPendingWrites {
+			for field := range pendingWrites {
+				if _, has := committedTxn.hashPendingWrites[key][field]; has {
+					return true
+				}
 			}
 		}
 	}
@@ -150,15 +160,19 @@ type Txn struct {
 	commitTs int64
 
 	// The data written is stored temporarily in pendingWrites instead of memtable
-	pendingWrites map[string]pendingWrite
+	// Record operations on each data structure separately
+	strPendingWrites  map[string]pendingWrite
+	hashPendingWrites map[string]map[string]pendingWrite // key to field to pendingWrite
 }
 
 func newTxn(readOnly bool, db *DB, isolationLevel IsolationLevel) *Txn {
+
 	return &Txn{
-		readOnly:       readOnly,
-		db:             db,
-		isolationLevel: isolationLevel,
-		pendingWrites:  make(map[string]pendingWrite),
+		readOnly:          readOnly,
+		db:                db,
+		isolationLevel:    isolationLevel,
+		strPendingWrites:  make(map[string]pendingWrite),
+		hashPendingWrites: make(map[string]map[string]pendingWrite),
 	}
 }
 
@@ -248,14 +262,10 @@ func (txn *Txn) commit() error {
 			return err
 		}
 
-		for key, pw := range txn.pendingWrites {
-			if pw.typ == data.LogRecordNormal {
-				txn.db.memTable.Put([]byte(key), pw.LogPos)
-			}
-			if pw.typ == data.LogRecordDeleted {
-				txn.db.memTable.Del([]byte(key))
-			}
-		}
+		// traverse the operations done by the transaction on each data structure
+		txn.setStrIndex()
+		txn.setHashIndex()
+
 		// the real commit
 		txn.db.oracle.newCommit(txn)
 		//fmt.Printf("=== %d === commit\n", id(txn.startTs))
@@ -281,9 +291,37 @@ func (txn *Txn) rollback() {
 	}
 }
 
+func (txn *Txn) setStrIndex() {
+	for key, pw := range txn.strPendingWrites {
+		if pw.typ == data.LogRecordNormal {
+			txn.db.index.getStrIndex().Put([]byte(key), pw.LogPos)
+		}
+		if pw.typ == data.LogRecordDeleted {
+			txn.db.index.getStrIndex().Del([]byte(key))
+		}
+	}
+}
+
+func (txn *Txn) setHashIndex() {
+	for key, pendingWrites := range txn.hashPendingWrites {
+		idx, _ := txn.db.index.getHashIndex(key)
+		for field, pw := range pendingWrites {
+			if pw.typ == data.LogRecordNormal {
+				idx.Put([]byte(field), pw.LogPos)
+			}
+			if pw.typ == data.LogRecordDeleted {
+				idx.Del([]byte(field))
+			}
+		}
+	}
+}
+
 // Get the key first in pendingWrites, if not then in db
 func (txn *Txn) Get(key []byte) ([]byte, error) {
-	if pos, ok := txn.pendingWrites[string(key)]; ok {
+	if len(key) == 0 {
+		return nil, public.ErrKeyIsEmpty
+	}
+	if pos, ok := txn.strPendingWrites[string(key)]; ok {
 		// If the key is found, check to see if it has been deleted
 		if pos.typ != data.LogRecordDeleted {
 			v, err := txn.db.getValueByPos(pos.LogPos)
@@ -294,24 +332,31 @@ func (txn *Txn) Get(key []byte) ([]byte, error) {
 		}
 		return nil, public.ErrKeyNotFound
 	}
-	return txn.db.Get(key)
+
+	pos := txn.db.index.getStrIndex().Get(key)
+	if pos == nil {
+		return nil, public.ErrKeyNotFound
+	}
+
+	return txn.db.getValueByPos(pos)
 }
 
-// Put writes data to the db, but instead of writing it back to memtable, it writes to pendingWrites first
-func (txn *Txn) Put(key []byte, value []byte) error {
+// Set writes data to the db, but instead of writing it back to memtable, it writes to pendingWrites first
+func (txn *Txn) Set(key []byte, value []byte) error {
 	if txn.readOnly {
 		return public.ErrUpdateInReadOnlyTxn
 	}
 	logRecord := &data.LogRecord{
-		Key:   encodeKeyWithTxId(key, txn.startTs),
-		Value: value,
-		Type:  data.LogRecordNormal,
+		Key:    encodeKeyWithTxId(key, txn.startTs),
+		Value:  value,
+		Type:   data.LogRecordNormal,
+		DSType: data.String,
 	}
 	pos, err := txn.db.appendLogRecordWithLock(logRecord)
 	if err != nil {
 		return err
 	}
-	txn.pendingWrites[string(key)] = pendingWrite{typ: data.LogRecordNormal, LogPos: pos}
+	txn.strPendingWrites[string(key)] = pendingWrite{typ: data.LogRecordNormal, LogPos: pos}
 	return nil
 }
 
@@ -321,15 +366,112 @@ func (txn *Txn) Del(key []byte) error {
 		return public.ErrUpdateInReadOnlyTxn
 	}
 	logRecord := &data.LogRecord{
-		Key:  encodeKeyWithTxId(key, txn.startTs),
-		Type: data.LogRecordDeleted,
+		Key:    encodeKeyWithTxId(key, txn.startTs),
+		Type:   data.LogRecordDeleted,
+		DSType: data.String,
 	}
 	pos, err := txn.db.appendLogRecordWithLock(logRecord)
 	if err != nil {
 		return err
 	}
-	txn.pendingWrites[string(key)] = pendingWrite{typ: data.LogRecordDeleted, LogPos: pos}
+	txn.strPendingWrites[string(key)] = pendingWrite{typ: data.LogRecordDeleted, LogPos: pos}
 	return nil
+}
+
+func (txn *Txn) SetNX(key, value []byte) error {
+	v, err := txn.Get(key)
+	if v != nil {
+		return public.ErrKeyExist
+	}
+
+	if err != nil && err != public.ErrKeyNotFound {
+		return err
+	}
+
+	return txn.Set(key, value)
+}
+
+func (txn *Txn) GetSet(key, value []byte) ([]byte, error) {
+	oldVal, err := txn.Get(key)
+	if err != nil {
+		return nil, err
+	}
+	err = txn.Set(key, value)
+	if err != nil {
+		return nil, err
+	}
+	return oldVal, nil
+}
+
+func (txn *Txn) StrLen(key []byte) (int, error) {
+	value, err := txn.Get(key)
+	if err != nil {
+		return 0, err
+	}
+	return len(value), nil
+}
+
+func (txn *Txn) Incr(key []byte) (int, error) {
+	return txn.incrOrDecr(key, true)
+}
+
+func (txn *Txn) Decr(key []byte) (int, error) {
+	return txn.incrOrDecr(key, false)
+}
+
+func (txn *Txn) incrOrDecr(key []byte, isIncr bool) (int, error) {
+	var (
+		newVal []byte
+		i      int
+		err    error
+	)
+
+	oldVal, err := txn.Get(key)
+	if err != nil {
+		if err == public.ErrKeyNotFound {
+			if isIncr {
+				i = 1
+				newVal = []byte(strconv.Itoa(1))
+			} else {
+				i = -1
+				newVal = []byte(strconv.Itoa(-1))
+			}
+		} else {
+			return 0, err
+		}
+	} else {
+		i, err = strconv.Atoi(string(oldVal))
+		if err != nil {
+			return 0, err
+		}
+		if isIncr {
+			i++
+		} else {
+			i--
+		}
+		newVal = []byte(strconv.Itoa(i))
+	}
+
+	err = txn.Set(key, newVal)
+	if err != nil {
+		return 0, err
+	}
+	return i, nil
+}
+
+func (txn *Txn) Exist(key []byte) bool {
+	if pos, ok := txn.strPendingWrites[string(key)]; ok {
+		if pos.typ != data.LogRecordDeleted {
+			return true
+		}
+		return false
+	}
+
+	if pos := txn.db.index.getStrIndex(); pos != nil {
+		return true
+	}
+
+	return false
 }
 
 func (txn *Txn) lock() {
