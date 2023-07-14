@@ -14,6 +14,11 @@ func TestTxn_HSet(t *testing.T) {
 	defer destroyCouloyDB(db)
 
 	err = db.SerialTransaction(false, func(txn *Txn) error {
+
+		value, err := txn.HGet(bytex.GetTestKey(0), bytex.GetTestKey(0))
+		assert.NotNil(t, err)
+		assert.Equal(t, public.ErrKeyNotFound, err)
+
 		err = txn.HSet(bytex.GetTestKey(0), bytex.GetTestKey(0), bytex.GetTestKey(0))
 		assert.Nil(t, err)
 
@@ -25,14 +30,12 @@ func TestTxn_HSet(t *testing.T) {
 		assert.NotNil(t, err)
 		assert.Equal(t, public.ErrKeyIsEmpty, err)
 
-		value, err := txn.HGet(bytex.GetTestKey(0), bytex.GetTestKey(0))
+		value, err = txn.HGet(bytex.GetTestKey(0), bytex.GetTestKey(0))
 		assert.Equal(t, bytex.GetTestKey(0), value)
 		assert.Nil(t, err)
 
 		return err
 	})
-
-	assert.Nil(t, err)
 }
 
 func TestTxn_HDel(t *testing.T) {
@@ -68,7 +71,7 @@ func TestTxn_HExist(t *testing.T) {
 	assert.NotNil(t, db)
 	defer destroyCouloyDB(db)
 
-	err = db.SerialTransaction(false, func(txn *Txn) error {
+	err = db.SerialTransaction(true, func(txn *Txn) error {
 		err = txn.HSet(bytex.GetTestKey(0), bytex.GetTestKey(0), bytex.GetTestKey(0))
 		assert.Nil(t, err)
 
@@ -98,7 +101,7 @@ func TestTxn_HGetAll(t *testing.T) {
 	exceptedData[string(bytex.GetTestKey(1))] = bytex.GetTestKey(1)
 	exceptedData[string(bytex.GetTestKey(2))] = bytex.GetTestKey(2)
 
-	err = db.SerialTransaction(false, func(txn *Txn) error {
+	err = db.SerialTransaction(true, func(txn *Txn) error {
 		err = txn.HSet(bytex.GetTestKey(0), bytex.GetTestKey(0), bytex.GetTestKey(0))
 		assert.Nil(t, err)
 
