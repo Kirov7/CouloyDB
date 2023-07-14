@@ -99,7 +99,14 @@ func (db *DB) merge() error {
 
 			// parse and get the real key
 			realKey, _ := parseLogRecordKey(logRecord.Key)
-			logRecordPos := db.strIndex.Get(realKey)
+			var logRecordPos *data.LogPos
+			switch logRecord.DSType {
+			case data.String:
+				logRecordPos = db.strIndex.Get(realKey)
+			case data.Hash:
+				realKey, field := decodeFieldKey(realKey)
+				logRecordPos = db.hashIndex[string(realKey)].Get(field)
+			}
 			// compare with the memTable, if the already exist in memTable then rewrite it
 			if logRecordPos != nil && logRecordPos.Fid == oldFile.FileId && logRecordPos.Offset == offset {
 				// clean the txId mark
