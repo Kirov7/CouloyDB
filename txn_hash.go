@@ -21,7 +21,7 @@ func (txn *Txn) HSet(key, field, value []byte) error {
 		txn.db.hashIndex[string(key)] = meta.NewMemTable(txn.db.options.IndexType)
 	}
 	logRecord := &data.LogRecord{
-		Key:    encodeKeyWithTxId(encodeFiledKey(key, field), txn.startTs),
+		Key:    encodeKeyWithTxId(encodeFieldKey(key, field), txn.startTs),
 		Value:  value,
 		Type:   data.LogRecordNormal,
 		DSType: data.Hash,
@@ -61,7 +61,7 @@ func (txn *Txn) HDel(key, field []byte) error {
 		return public.ErrUpdateInReadOnlyTxn
 	}
 	logRecord := &data.LogRecord{
-		Key:    encodeKeyWithTxId(encodeFiledKey(key, field), txn.startTs),
+		Key:    encodeKeyWithTxId(encodeFieldKey(key, field), txn.startTs),
 		Type:   data.LogRecordDeleted,
 		DSType: data.Hash,
 	}
@@ -117,7 +117,7 @@ func (txn *Txn) HGetAll(key []byte) ([][]byte, [][]byte, error) {
 	return keys, values, nil
 }
 
-func encodeFiledKey(key, field []byte) []byte {
+func encodeFieldKey(key, field []byte) []byte {
 	header := make([]byte, binary.MaxVarintLen64*2)
 	var index int
 	index += binary.PutVarint(header[index:], int64(len(key)))
@@ -130,7 +130,7 @@ func encodeFiledKey(key, field []byte) []byte {
 	return buf
 }
 
-func decodeFiledKey(key []byte) ([]byte, []byte) {
+func decodeFieldKey(key []byte) ([]byte, []byte) {
 	var index int
 	keySize, i := binary.Varint(key[index:])
 	index += i

@@ -509,7 +509,7 @@ func (db *DB) loadIndex(fids []int) error {
 				db.strIndex.Put(key, pos)
 			}
 		case data.Hash:
-			realKey, filed := decodeFiledKey(log.Key)
+			realKey, filed := decodeFieldKey(log.Key)
 			if _, ok := db.hashIndex[string(realKey)]; !ok {
 				db.hashIndex[string(realKey)] = meta.NewMemTable(db.options.IndexType)
 			}
