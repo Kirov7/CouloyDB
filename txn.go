@@ -412,14 +412,22 @@ func (txn *Txn) StrLen(key []byte) (int, error) {
 }
 
 func (txn *Txn) Incr(key []byte) (int, error) {
-	return txn.incrOrDecr(key, true)
+	return txn.incrOrDecr(key, true, 1)
 }
 
 func (txn *Txn) Decr(key []byte) (int, error) {
-	return txn.incrOrDecr(key, false)
+	return txn.incrOrDecr(key, false, 1)
 }
 
-func (txn *Txn) incrOrDecr(key []byte, isIncr bool) (int, error) {
+func (txn *Txn) IncrBy(key []byte, delta int) (int, error) {
+	return txn.incrOrDecr(key, true, delta)
+}
+
+func (txn *Txn) DecrBy(key []byte, delta int) (int, error) {
+	return txn.incrOrDecr(key, false, delta)
+}
+
+func (txn *Txn) incrOrDecr(key []byte, isIncr bool, delta int) (int, error) {
 	var (
 		newVal []byte
 		i      int
@@ -430,11 +438,11 @@ func (txn *Txn) incrOrDecr(key []byte, isIncr bool) (int, error) {
 	if err != nil {
 		if err == public.ErrKeyNotFound {
 			if isIncr {
-				i = 1
-				newVal = []byte(strconv.Itoa(1))
+				i = delta
+				newVal = []byte(strconv.Itoa(delta))
 			} else {
-				i = -1
-				newVal = []byte(strconv.Itoa(-1))
+				i = -delta
+				newVal = []byte(strconv.Itoa(-delta))
 			}
 		} else {
 			return 0, err
@@ -445,9 +453,9 @@ func (txn *Txn) incrOrDecr(key []byte, isIncr bool) (int, error) {
 			return 0, err
 		}
 		if isIncr {
-			i++
+			i += delta
 		} else {
-			i--
+			i -= delta
 		}
 		newVal = []byte(strconv.Itoa(i))
 	}
@@ -467,11 +475,23 @@ func (txn *Txn) Exist(key []byte) bool {
 		return false
 	}
 
-	if pos := txn.db.index.getStrIndex(); pos != nil {
+	if pos := txn.db.index.getStrIndex().Get(key); pos != nil {
 		return true
 	}
 
 	return false
+}
+
+func (txn *Txn) Append(key []byte, value []byte) error {
+	if !txn.Exist(key) {
+		return txn.Set(key, value)
+	}
+	v, err := txn.Get(key)
+	if err != nil {
+		return err
+	}
+	v = append(v, value...)
+	return txn.Set(key, v)
 }
 
 func (txn *Txn) lock() {

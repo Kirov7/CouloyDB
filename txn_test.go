@@ -93,6 +93,17 @@ func TestTxn_Incr(t *testing.T) {
 		assert.Nil(t, err)
 		assert.Equal(t, 1, incr)
 
+		incr, err = txn.IncrBy(bytex.GetTestKey(0), 3)
+		assert.Nil(t, err)
+		assert.Equal(t, 5, incr)
+
+		value, err := txn.Get(bytex.GetTestKey(0))
+		assert.Nil(t, err)
+
+		i, err := strconv.Atoi(string(value))
+		assert.Nil(t, err)
+		assert.Equal(t, 5, i)
+
 		return nil
 	})
 }
@@ -107,13 +118,51 @@ func TestTxn_Decr(t *testing.T) {
 		err := txn.Set(bytex.GetTestKey(0), []byte(strconv.Itoa(1)))
 		assert.Nil(t, err)
 
-		incr, err := txn.Decr(bytex.GetTestKey(0))
-		assert.Equal(t, 0, incr)
+		decr, err := txn.Decr(bytex.GetTestKey(0))
+		assert.Equal(t, 0, decr)
 		assert.Nil(t, err)
 
-		incr, err = txn.Decr(bytex.GetTestKey(1))
+		decr, err = txn.Decr(bytex.GetTestKey(1))
 		assert.Nil(t, err)
-		assert.Equal(t, -1, incr)
+		assert.Equal(t, -1, decr)
+
+		decr, err = txn.DecrBy(bytex.GetTestKey(0), 3)
+		assert.Nil(t, err)
+		assert.Equal(t, -3, decr)
+
+		value, err := txn.Get(bytex.GetTestKey(0))
+		assert.Nil(t, err)
+
+		i, err := strconv.Atoi(string(value))
+		assert.Equal(t, -3, i)
+
+		return nil
+	})
+}
+
+func TestTxn_Append(t *testing.T) {
+	db, err := NewCouloyDB(DefaultOptions())
+	assert.Nil(t, err)
+	assert.NotNil(t, db)
+	defer destroyCouloyDB(db)
+
+	err = db.SerialTransaction(false, func(txn *Txn) error {
+		err := txn.Set(bytex.GetTestKey(0), []byte("hello"))
+		assert.Nil(t, err)
+
+		err = txn.Append(bytex.GetTestKey(0), []byte(", world"))
+		assert.Nil(t, err)
+
+		value, err := txn.Get(bytex.GetTestKey(0))
+		assert.Nil(t, err)
+		assert.Equal(t, []byte("hello, world"), value)
+
+		err = txn.Append(bytex.GetTestKey(1), []byte("couloy"))
+		assert.Nil(t, err)
+
+		value, err = txn.Get(bytex.GetTestKey(1))
+		assert.Nil(t, err)
+		assert.Equal(t, []byte("couloy"), value)
 
 		return nil
 	})
