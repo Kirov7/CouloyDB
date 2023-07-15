@@ -494,6 +494,39 @@ func (txn *Txn) Append(key []byte, value []byte) error {
 	return txn.Set(key, v)
 }
 
+func (txn *Txn) MGet(keys [][]byte) ([][]byte, error) {
+	values := make([][]byte, len(keys))
+
+	for i, key := range keys {
+		value, err := txn.Get(key)
+		if err != nil {
+			if err == public.ErrKeyNotFound {
+				values[i] = nil
+				continue
+			}
+			return nil, err
+		}
+		values[i] = value
+	}
+
+	return values, nil
+}
+
+func (txn *Txn) MSet(args [][]byte) error {
+	if len(args)%2 != 0 {
+		return public.ErrTxnArgsWrong
+	}
+
+	for i := 0; i < len(args); i += 2 {
+		err := txn.Set(args[i], args[i+1])
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 func (txn *Txn) lock() {
 	if txn.readOnly {
 		txn.db.oracle.mu.RLock()

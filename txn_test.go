@@ -168,6 +168,37 @@ func TestTxn_Append(t *testing.T) {
 	})
 }
 
+func TestTxn_MSet(t *testing.T) {
+	db, err := NewCouloyDB(DefaultOptions())
+	assert.Nil(t, err)
+	assert.NotNil(t, db)
+	defer destroyCouloyDB(db)
+
+	err = db.SerialTransaction(false, func(txn *Txn) error {
+		err := txn.MSet([][]byte{
+			bytex.GetTestKey(0), bytex.GetTestKey(0),
+			bytex.GetTestKey(1), bytex.GetTestKey(1),
+			bytex.GetTestKey(2), bytex.GetTestKey(2),
+		})
+		assert.Nil(t, err)
+
+		values, err := txn.MGet([][]byte{bytex.GetTestKey(0), bytex.GetTestKey(1), bytex.GetTestKey(2)})
+		assert.Nil(t, err)
+
+		for i := 0; i < 3; i++ {
+			assert.Equal(t, bytex.GetTestKey(i), values[i])
+		}
+
+		values, err = txn.MGet([][]byte{bytex.GetTestKey(3)})
+		assert.Nil(t, err)
+		assert.Nil(t, values[0])
+
+		return err
+	})
+
+	assert.Nil(t, err)
+}
+
 func TestDB_RWTransaction(t *testing.T) {
 	db, err := NewCouloyDB(DefaultOptions())
 	assert.Nil(t, err)
