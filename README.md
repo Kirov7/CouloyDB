@@ -1,5 +1,5 @@
 # CouloyDB & Kuloy
- 
+
 CouloyDB's goal is to compromise between performance and storage costs, as an alternative to memory KV storage like Redis in some scenarios.
 
 ![icon.png](https://img1.imgtp.com/2023/05/05/WZgs6o2t.png)
@@ -12,11 +12,9 @@ CouloyDB's goal is to compromise between performance and storage costs, as an al
 
 **In a nutshell, Couloy is a code library that acts as an embedded storage engine like LevelDB, while Kuloy is a runnable program like Redis.**
 
-
-
 ## 🚀 How to use CouloyDB & Kuloy?
 
-> ⚠️ Note that CouloyDB & Kuloy has not been officially released and does not guarantee completely reliable compatibility!!!
+> ⚠️ **Notice:** CouloyDB & Kuloy has not been officially released and does not guarantee completely reliable compatibility!!!
 
 ### 🏁 Fast start: CouloyDB
 
@@ -27,7 +25,11 @@ go get github.com/Kirov7/CouloyDB
 ```
 
 Use CouloyDB in your project:
+
 `Basic usage example`
+
+Now, the basic API of CouloyDB only supports key-value pairs of **simple byte array type**. These APIs only can guarantee **the atomicity of a single operation**. If you only want to store some simple data, you can use these APIs.They may be abolition soon, so **we recommend that all operations be done in a transaction**. And they **should not** be used concurrently with transaction APIs, which would break the ACID properties of transactions.
+
 ```go
 func TestCouloyDB(t *testing.T) {
 	conf := couloy.DefaultOptions()
@@ -77,42 +79,74 @@ func TestCouloyDB(t *testing.T) {
 }
 ```
 `Transaction usage example`
+
+Transaction should be used if you want operations to be **safe** and store data in a **different data structure**.Currently, transaction support **read-committed** isolation levels and **serializable** isolation levels.Since the Bitcask model requires a full storage index, it is not planned to implement MVCC to support snapshot isolation level or serializable snapshot isolation level.
+
 ```go
 func TestTxn(t *testing.T) {
-	conf := couloy.DefaultOptions()
-	db, err := couloy.NewCouloyDB(conf)
+	db, err := NewCouloyDB(DefaultOptions())
 	if err != nil {
 		log.Fatal(err)
 	}
-	
-	key := []byte("first key")
-	value := []byte("first value")
-	
-	txAction := func(txn *couloy.Txn) error {
-		err := txn.Put(key, value)
-		if err != nil {
-			return err
-		}
-		v, err := txn.Get(key)
-		if err != nil {
-			return err
-		}
-		fmt.Println(v)
-		return nil
+
+	// the first parameter passed in is used to determine whether to automatically retry 
+	// when this transaction conflicts
+	err = db.RWTransaction(false, func(txn *Txn) error {
+		return txn.Set(bytex.GetTestKey(0), bytex.GetTestKey(0))
+	})
+
+	if err != nil {
+		log.Fatal(err)
 	}
-	
-	// the first parameter passed in is used to determine whether to automatically retry when this transaction conflicts
-	if err := db.RWTransaction(false, txAction); err != nil {
+
+	// the first parameter passed in is used to determine whether this transaction is read-only
+	err = db.SerialTransaction(true, func(txn *Txn) error {
+		value, err := txn.Get(bytex.GetTestKey(0))
+		if err != nil {
+			return err
+		}
+		if !bytes.Equal(value, bytex.GetTestKey(0)) {
+			return err
+		}
+		return nil
+	})
+
+	if err != nil {
 		log.Fatal(err)
 	}
 }
 ```
-> Please note that Couloy's transaction follows the Read Committed isolation level, and is a happy transaction model.<br>
- It follows the first-commit-win principle, which means that when a transaction conflicts, it will roll back and return an error.<br>
- You can set whether to automatically retry through the first input parameter of RWTransaction，or catch errors to handle conflicts yourself.<br>
- And you should know RC level can avoid the occurrence of dirty writes and dirty reads, but cannot avoid unrepeatable reads, phantom reads, write skew.<br>
+You can safely manipulate the database by calling methods of Txn.
+
+Currently supported data structure types and supported commands：
+
+- String:
+  - GET
+  - SET
+  - DEL
+  - SETNX
+  - GETSET
+  - STRLEN
+  - INCR
+  - INCRBY
+  - DECR
+  - DECRBY
+  - EXIST
+  - APPEND
+  - MGET
+  - MSET
+- Hash:
+  - HSET
+  - HGET
+  - HDEL
+  - HEXIST
+  - HGETALL
+
+In the future, we will support more data structures and commands.
 
 ### 🏁 Fast start: Kuloy
+
+> ⚠️ **Notice:** We are **refactoring** Kuloy so that it directly calls the native interface of the storage engine layer (CouloyDB) to implement commands. After the refactoring is completed, we will open a new repository to maintain Kuloy. Now it only supports less features.
 
 You can download executable files directly or compile through source code:
 
@@ -242,7 +276,14 @@ func TestKuloy(t *testing.T) {
 - [x] Use mmap to read data file that on disk. [ however, the official mmap library is not optimized enough and needs to be further optimized ]
 - [x] Embedded lua script interpreter to support the execution of operations with complex logic [ currently implemented on CouloyDB, Kuloy still does not support ].
 - [x] Extend protocol support for Redis to act as a KV storage server in the network. [ has completed the basic implementation of Kuloy ]
-- [ ] Extend to build complex data structures with the same interface as Redis, such as List, Hash, Set, ZSet, Bitmap, etc.
+- [ ] Extend to build data structures in storage engine layer with the same interface as Redis:
+  - [x] String
+  - [x] Hash
+  - [ ] List
+  - [ ] Set
+  - [ ] ZSet
+  - [ ] Bitmap
+
 - [x] Extend easy-to-use distributed solution (may support both gossip and raft protocols for different usage scenarios) [ has supported gossip ]
 - [ ] Extend to add backup nodes for a single node in a consistent hash cluster.
 - [ ] Add the necessary Rehash functionality.
