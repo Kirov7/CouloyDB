@@ -141,6 +141,8 @@ Currently supported data structure types and supported commands：
   - HDEL
   - HEXIST
   - HGETALL
+  - HMSET
+  - HMGET
 
 In the future, we will support more data structures and commands.
 
