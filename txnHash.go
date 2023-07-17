@@ -145,6 +145,39 @@ func (txn *Txn) HGetAll(key []byte) ([][]byte, [][]byte, error) {
 	return keys, values, nil
 }
 
+func (txn *Txn) HMGet(key []byte, fields [][]byte) ([][]byte, error) {
+	values := make([][]byte, len(fields))
+
+	for i, field := range fields {
+		value, err := txn.HGet(key, field)
+		if err != nil {
+			if err == public.ErrKeyNotFound {
+				values[i] = nil
+				continue
+			}
+			return nil, err
+		}
+		values[i] = value
+	}
+
+	return values, nil
+}
+
+func (txn *Txn) HMSet(key []byte, args [][]byte) error {
+	if len(args)%2 != 0 {
+		return public.ErrTxnArgsWrong
+	}
+
+	for i := 0; i < len(args); i += 2 {
+		err := txn.HSet(key, args[i], args[i+1])
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 func encodeFieldKey(key, field []byte) []byte {
 	header := make([]byte, binary.MaxVarintLen64*2)
 	var index int

@@ -130,6 +130,38 @@ func TestTxn_HGetAll(t *testing.T) {
 	})
 }
 
+func TestTxn_HMSet(t *testing.T) {
+	db, err := NewCouloyDB(DefaultOptions())
+	assert.Nil(t, err)
+	assert.NotNil(t, db)
+	defer destroyCouloyDB(db)
+
+	err = db.SerialTransaction(false, func(txn *Txn) error {
+		return txn.HMSet(bytex.GetTestKey(0), [][]byte{bytex.GetTestKey(0), bytex.GetTestKey(0),
+			bytex.GetTestKey(1), bytex.GetTestKey(1),
+			bytex.GetTestKey(2), bytex.GetTestKey(2)})
+	})
+
+	err = db.SerialTransaction(true, func(txn *Txn) error {
+		values, err := txn.HMGet(bytex.GetTestKey(0), [][]byte{bytex.GetTestKey(0),
+			bytex.GetTestKey(1), bytex.GetTestKey(2), bytex.GetTestKey(3)})
+
+		assert.Nil(t, err)
+		for i, value := range values {
+			if i < 3 {
+				assert.Equal(t, bytex.GetTestKey(i), value)
+			} else {
+				assert.Nil(t, value)
+			}
+		}
+
+		return err
+	})
+
+	assert.Nil(t, err)
+
+}
+
 func TestTxn_Hash_Restart(t *testing.T) {
 	db, err := NewCouloyDB(DefaultOptions())
 	assert.Nil(t, err)
