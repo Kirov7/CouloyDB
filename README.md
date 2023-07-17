@@ -1,5 +1,7 @@
 # CouloyDB & Kuloy
 
+English | [简体中文](https://github.com/Kirov7/CouloyDB/blob/master/README_ZH.md)
+
 CouloyDB's goal is to compromise between performance and storage costs, as an alternative to memory KV storage like Redis in some scenarios.
 
 ![icon.png](https://img1.imgtp.com/2023/05/05/WZgs6o2t.png)
@@ -24,9 +26,7 @@ Import the library:
 go get github.com/Kirov7/CouloyDB
 ```
 
-Use CouloyDB in your project:
-
-`Basic usage example`
+#### Basic usage example
 
 Now, the basic API of CouloyDB only supports key-value pairs of **simple byte array type**. These APIs only can guarantee **the atomicity of a single operation**. If you only want to store some simple data, you can use these APIs.They may be abolition soon, so **we recommend that all operations be done in a transaction**. And they **should not** be used concurrently with transaction APIs, which would break the ACID properties of transactions.
 
@@ -78,7 +78,7 @@ func TestCouloyDB(t *testing.T) {
 	}
 }
 ```
-`Transaction usage example`
+#### Transaction usage example
 
 Transaction should be used if you want operations to be **safe** and store data in a **different data structure**.Currently, transaction support **read-committed** isolation levels and **serializable** isolation levels.Since the Bitcask model requires a full storage index, it is not planned to implement MVCC to support snapshot isolation level or serializable snapshot isolation level.
 
@@ -116,9 +116,9 @@ func TestTxn(t *testing.T) {
 	}
 }
 ```
-You can safely manipulate the database by calling methods of Txn.
+You can safely manipulate the database by calling methods of `Txn`.
 
-Currently supported data structure types and supported commands：
+#### Currently supported data structure types and supported operations：
 
 - String:
   - GET
@@ -144,7 +144,7 @@ Currently supported data structure types and supported commands：
   - HMSET
   - HMGET
 
-In the future, we will support more data structures and commands.
+In the future, we will support more data structures and operations.
 
 ### 🏁 Fast start: Kuloy
 
@@ -197,7 +197,7 @@ engine:
   mergeInterval: 28800
 ```
 
-> You can find the configuration file template in cmd/config.
+You can find the configuration file template in cmd/config.
 
 #### 🎯 Deploying standalone Kuloy service
 
@@ -211,17 +211,21 @@ engine:
 ./kuloy cluster -c ./config/config.yaml
 ```
 
+#### 🎯 View Help Options
+
 You can run the following command to view the functions of all configuration items:
 
 ```sh
 ./kuloy --help
 ```
 
-The Kuloy service currently supports some operations of the String type in Redis, as well as some general operations.
+#### 🎯 Accessing Kuloy service
+
+The Kuloy service currently supports some operations of the String type in Redis, as well as some general operations.More data structures will be supported after our refactoring is complete.
 
 You can use Kuloy as you would normally use Redis (only for currently supported operations, of course).
 
-Use the go-redis client demonstration here
+Use the go-redis client demonstration here:
 
 ```sh
 go get github.com/go-redis/redis/v8
@@ -270,7 +274,7 @@ func TestKuloy(t *testing.T) {
   - PING
   - SELECT
 
-## 🔮 What will I do next?
+## 🔮 What will we do next?
 
 - [x] Implement batch write and basic transaction functions [ now, CouloyDB supports the RC and the Serializable transaction isolation level ].
 - [ ] Optimize hintfile storage structure to support the memtable build faster (may use gob).
@@ -290,10 +294,9 @@ func TestKuloy(t *testing.T) {
 - [ ] Extend to add backup nodes for a single node in a consistent hash cluster.
 - [ ] Add the necessary Rehash functionality.
 
-<br>
+## Contact us?
+If you have any questions and want to contact us, you can send an email to: crazyfay@qq.com.
 
-## Contact me?
-If you have any questions and want to contact me, you can send me an email: crazyfay@qq.com<br>
-Or join this Tencent WeChat group. I will try my best to solve all the problems<br>
+Or join this Tencent WeChat group. We will try our best to solve all the problems.
 
 <img src="https://img1.imgtp.com/2023/07/09/H6JhHIQy.png" alt="WeChat.png" style="width:20%;" />
