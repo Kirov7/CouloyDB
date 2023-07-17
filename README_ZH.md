@@ -14,7 +14,7 @@ CouloyDB的目标是在某些场景中作为内存KV存储（例如Redis）的�
 
 ## 🚀 如何使用 CouloyDB 和 Kuloy？
 
-> ⚠️ **注意：**CouloyDB和Kuloy尚未正式发布，无法完全保证可靠的兼容性！
+> ⚠️ **注意：** CouloyDB 和 Kuloy尚未正式发布，无法完全保证可靠的兼容性！
 
 ### 🏁 快速上手 CouloyDB
 
