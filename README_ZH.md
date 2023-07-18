@@ -298,4 +298,4 @@ func TestKuloy(t *testing.T) {
 
 如果您有任何疑问并想联系我们，您可以发送电子邮件至：crazyfay@qq.com。或者加入这个腾讯微信群。 我们将尽力解决所有问题。
 
-<img src="https://img1.imgtp.com/2023/07/09/H6JhHIQy.png" alt="WeChat.png" style="width:20%;" />
+<img src="https://img1.imgtp.com/2023/07/18/bKL5QgLr.png" alt="WeChat.png" style="width:20%;" />
