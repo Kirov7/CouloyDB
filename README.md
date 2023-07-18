@@ -299,4 +299,4 @@ If you have any questions and want to contact us, you can send an email to: craz
 
 Or join this Tencent WeChat group. We will try our best to solve all the problems.
 
-<img src="https://img1.imgtp.com/2023/07/09/H6JhHIQy.png" alt="WeChat.png" style="width:20%;" />
+<img src="https://img1.imgtp.com/2023/07/18/bKL5QgLr.png" alt="WeChat.png" style="width:20%;" />
