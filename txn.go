@@ -4,6 +4,7 @@ import (
 	"container/heap"
 	"github.com/Kirov7/CouloyDB/data"
 	"github.com/Kirov7/CouloyDB/public"
+	"github.com/Kirov7/CouloyDB/public/utils/wait"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -163,6 +164,8 @@ type Txn struct {
 	// Record operations on each data structure separately
 	strPendingWrites  map[string]pendingWrite
 	hashPendingWrites map[string]map[string]pendingWrite // key to field to pendingWrite
+
+	waitCommit *wait.Wait
 }
 
 func newTxn(readOnly bool, db *DB, isolationLevel IsolationLevel) *Txn {
@@ -173,6 +176,7 @@ func newTxn(readOnly bool, db *DB, isolationLevel IsolationLevel) *Txn {
 		isolationLevel:    isolationLevel,
 		strPendingWrites:  make(map[string]pendingWrite),
 		hashPendingWrites: make(map[string]map[string]pendingWrite),
+		waitCommit:        wait.NewWait(),
 	}
 }
 
@@ -263,8 +267,9 @@ func (txn *Txn) commit() error {
 		}
 
 		// traverse the operations done by the transaction on each data structure
-		txn.setStrIndex()
-		txn.setHashIndex()
+		go txn.setStrIndex()
+		go txn.setHashIndex()
+		txn.waitCommit.Wait()
 
 		// the real commit
 		txn.db.oracle.newCommit(txn)
@@ -292,6 +297,7 @@ func (txn *Txn) rollback() {
 }
 
 func (txn *Txn) setStrIndex() {
+	txn.waitCommit.Add(1)
 	for key, pw := range txn.strPendingWrites {
 		if pw.typ == data.LogRecordNormal {
 			txn.db.index.getStrIndex().Put([]byte(key), pw.LogPos)
@@ -300,9 +306,11 @@ func (txn *Txn) setStrIndex() {
 			txn.db.index.getStrIndex().Del([]byte(key))
 		}
 	}
+	txn.waitCommit.Done()
 }
 
 func (txn *Txn) setHashIndex() {
+	txn.waitCommit.Add(1)
 	for key, pendingWrites := range txn.hashPendingWrites {
 		idx, _ := txn.db.index.getHashIndex(key)
 		for field, pw := range pendingWrites {
@@ -314,6 +322,7 @@ func (txn *Txn) setHashIndex() {
 			}
 		}
 	}
+	txn.waitCommit.Done()
 }
 
 // Get the key first in pendingWrites, if not then in db
