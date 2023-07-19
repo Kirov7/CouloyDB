@@ -67,6 +67,10 @@ func NewCouloyDB(opt Options) (*DB, error) {
 		index: &index{
 			hashIndex: make(map[string]meta.MemTable),
 			strIndex:  meta.NewMemTable(opt.IndexType),
+			listIndex: listIndex{
+				metaIndex: meta.NewMemTable(opt.IndexType),
+				dataIndex: make(map[string]meta.MemTable),
+			},
 		},
 		indexLocks: make(map[data.DataStructureType]*sync.RWMutex),
 		mu:         new(sync.RWMutex),
