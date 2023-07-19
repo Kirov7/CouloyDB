@@ -20,6 +20,8 @@ type DataStructureType uint8
 const (
 	String DataStructureType = iota
 	Hash
+	List
+	ListMeta
 )
 
 const (

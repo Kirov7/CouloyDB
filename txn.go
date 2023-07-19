@@ -166,18 +166,23 @@ type Txn struct {
 	strPendingWrites  map[string]pendingWrite
 	hashPendingWrites map[string]map[string]pendingWrite // key to field to pendingWrite
 
+	listMetaPendingWrites map[string]pendingWrite
+	listDataPendingWrites map[string]map[float64]pendingWrite
+
 	waitCommit *wait.Wait
 }
 
 func newTxn(readOnly bool, db *DB, isolationLevel IsolationLevel) *Txn {
 
 	return &Txn{
-		readOnly:          readOnly,
-		db:                db,
-		isolationLevel:    isolationLevel,
-		strPendingWrites:  make(map[string]pendingWrite),
-		hashPendingWrites: make(map[string]map[string]pendingWrite),
-		waitCommit:        wait.NewWait(),
+		readOnly:              readOnly,
+		db:                    db,
+		isolationLevel:        isolationLevel,
+		strPendingWrites:      make(map[string]pendingWrite),
+		hashPendingWrites:     make(map[string]map[string]pendingWrite),
+		listMetaPendingWrites: make(map[string]pendingWrite),
+		listDataPendingWrites: make(map[string]map[float64]pendingWrite),
+		waitCommit:            wait.NewWait(),
 	}
 }
 
