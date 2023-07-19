@@ -3,7 +3,6 @@ package CouloyDB
 import (
 	"encoding/binary"
 	"github.com/Kirov7/CouloyDB/data"
-	"github.com/Kirov7/CouloyDB/meta"
 	"github.com/Kirov7/CouloyDB/public"
 )
 
@@ -17,10 +16,6 @@ func (txn *Txn) HSet(key, field, value []byte) error {
 
 	if txn.readOnly {
 		return public.ErrUpdateInReadOnlyTxn
-	}
-
-	if _, ok := txn.db.index.getHashIndex(string(key)); !ok {
-		txn.db.index.setHashIndex(string(key), meta.NewMemTable(txn.db.options.IndexType))
 	}
 
 	logRecord := &data.LogRecord{
@@ -112,37 +107,37 @@ func (txn *Txn) HExist(key, field []byte) bool {
 }
 
 func (txn *Txn) HGetAll(key []byte) ([][]byte, [][]byte, error) {
-	keys, values := make([][]byte, 0), make([][]byte, 0)
+	fields, values := make([][]byte, 0), make([][]byte, 0)
 
-	hash, ok := txn.db.index.getHashIndex(string(key))
-
-	if !ok {
-		return nil, nil, public.ErrKeyNotFound
-	}
-
-	iterator := hash.Iterator(false)
-
-	for iterator.Rewind(); iterator.Valid(); iterator.Next() {
-		if pw, ok := txn.hashPendingWrites[string(key)][string(iterator.Key())]; ok {
-			if pw.typ != data.LogRecordDeleted {
-				v, err := txn.db.getValueByPos(pw.LogPos)
-				if err != nil {
-					return nil, nil, err
-				}
-				keys = append(keys, iterator.Key())
-				values = append(values, v)
+	for field, pw := range txn.hashPendingWrites[string(key)] {
+		if pw.typ != data.LogRecordDeleted {
+			v, err := txn.db.getValueByPos(pw.LogPos)
+			if err != nil {
+				return nil, nil, err
 			}
-			continue
+			fields = append(fields, []byte(field))
+			values = append(values, v)
 		}
-
-		v, err := txn.db.getValueByPos(iterator.Value())
-		if err != nil {
-			return nil, nil, err
-		}
-		keys = append(keys, iterator.Key())
-		values = append(values, v)
 	}
-	return keys, values, nil
+
+	if hash, ok := txn.db.index.getHashIndex(string(key)); ok {
+		iterator := hash.Iterator(false)
+
+		for iterator.Rewind(); iterator.Valid(); iterator.Next() {
+			if _, ok := txn.hashPendingWrites[string(key)][string(iterator.Key())]; ok {
+				continue
+			}
+
+			v, err := txn.db.getValueByPos(iterator.Value())
+			if err != nil {
+				return nil, nil, err
+			}
+			fields = append(fields, iterator.Key())
+			values = append(values, v)
+		}
+	}
+
+	return fields, values, nil
 }
 
 func (txn *Txn) HMGet(key []byte, fields [][]byte) ([][]byte, error) {

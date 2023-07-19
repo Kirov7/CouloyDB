@@ -3,6 +3,7 @@ package CouloyDB
 import (
 	"container/heap"
 	"github.com/Kirov7/CouloyDB/data"
+	"github.com/Kirov7/CouloyDB/meta"
 	"github.com/Kirov7/CouloyDB/public"
 	"github.com/Kirov7/CouloyDB/public/utils/wait"
 	"strconv"
@@ -267,8 +268,8 @@ func (txn *Txn) commit() error {
 		}
 
 		// traverse the operations done by the transaction on each data structure
-		go txn.setStrIndex()
-		go txn.setHashIndex()
+		go txn.updateStrIndex()
+		go txn.updateHashIndex()
 		txn.waitCommit.Wait()
 
 		// the real commit
@@ -296,7 +297,7 @@ func (txn *Txn) rollback() {
 	}
 }
 
-func (txn *Txn) setStrIndex() {
+func (txn *Txn) updateStrIndex() {
 	txn.waitCommit.Add(1)
 	for key, pw := range txn.strPendingWrites {
 		if pw.typ == data.LogRecordNormal {
@@ -309,10 +310,16 @@ func (txn *Txn) setStrIndex() {
 	txn.waitCommit.Done()
 }
 
-func (txn *Txn) setHashIndex() {
+func (txn *Txn) updateHashIndex() {
 	txn.waitCommit.Add(1)
 	for key, pendingWrites := range txn.hashPendingWrites {
-		idx, _ := txn.db.index.getHashIndex(key)
+
+		idx, ok := txn.db.index.getHashIndex(key)
+		if !ok {
+			txn.db.index.setHashIndex(key, meta.NewMemTable(txn.db.options.IndexType))
+			idx, _ = txn.db.index.getHashIndex(key)
+		}
+
 		for field, pw := range pendingWrites {
 			if pw.typ == data.LogRecordNormal {
 				idx.Put([]byte(field), pw.LogPos)
