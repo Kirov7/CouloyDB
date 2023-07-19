@@ -400,6 +400,14 @@ func (txn *Txn) SetNX(key, value []byte) error {
 	return txn.Set(key, value)
 }
 
+func (txn *Txn) SetEX(key, value []byte) error {
+	_, err := txn.Get(key)
+	if err != nil {
+		return err
+	}
+	return txn.Set(key, value)
+}
+
 func (txn *Txn) GetSet(key, value []byte) ([]byte, error) {
 	oldVal, err := txn.Get(key)
 	if err != nil {

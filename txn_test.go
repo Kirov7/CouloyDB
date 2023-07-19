@@ -33,6 +33,29 @@ func TestTxn_SetNX(t *testing.T) {
 	assert.Nil(t, err)
 }
 
+func TestTxn_SetEX(t *testing.T) {
+	db, err := NewCouloyDB(DefaultOptions())
+	assert.Nil(t, err)
+	assert.NotNil(t, db)
+	defer destroyCouloyDB(db)
+
+	err = db.SerialTransaction(false, func(txn *Txn) error {
+		err := txn.Set(bytex.GetTestKey(0), bytex.RandomBytes(24))
+		assert.Nil(t, err)
+
+		err = txn.SetEX(bytex.GetTestKey(0), bytex.RandomBytes(24))
+		assert.Nil(t, err)
+
+		err = txn.SetEX(bytex.GetTestKey(1), bytex.RandomBytes(24))
+		assert.NotNil(t, err)
+		assert.Equal(t, public.ErrKeyNotFound, err)
+
+		return nil
+	})
+
+	assert.Nil(t, err)
+}
+
 func TestTxn_StrLen(t *testing.T) {
 	db, err := NewCouloyDB(DefaultOptions())
 	assert.Nil(t, err)
