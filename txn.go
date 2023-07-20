@@ -163,11 +163,11 @@ type Txn struct {
 
 	// The data written is stored temporarily in pendingWrites instead of memtable
 	// Record operations on each data structure separately
-	strPendingWrites  map[string]pendingWrite
-	hashPendingWrites map[string]map[string]pendingWrite // key to field to pendingWrite
+	strPendingWrites  map[string]*pendingWrite
+	hashPendingWrites map[string]map[string]*pendingWrite // key to field to pendingWrite
 
-	listMetaPendingWrites map[string]pendingWrite
-	listDataPendingWrites map[string]map[float64]pendingWrite
+	listMetaPendingWrites map[string]*pendingWrite
+	listDataPendingWrites map[string]map[float64]*pendingWrite
 
 	waitCommit *wait.Wait
 }
@@ -178,10 +178,10 @@ func newTxn(readOnly bool, db *DB, isolationLevel IsolationLevel) *Txn {
 		readOnly:              readOnly,
 		db:                    db,
 		isolationLevel:        isolationLevel,
-		strPendingWrites:      make(map[string]pendingWrite),
-		hashPendingWrites:     make(map[string]map[string]pendingWrite),
-		listMetaPendingWrites: make(map[string]pendingWrite),
-		listDataPendingWrites: make(map[string]map[float64]pendingWrite),
+		strPendingWrites:      make(map[string]*pendingWrite),
+		hashPendingWrites:     make(map[string]map[string]*pendingWrite),
+		listMetaPendingWrites: make(map[string]*pendingWrite),
+		listDataPendingWrites: make(map[string]map[float64]*pendingWrite),
 		waitCommit:            wait.NewWait(),
 	}
 }
@@ -377,7 +377,7 @@ func (txn *Txn) Set(key []byte, value []byte) error {
 	if err != nil {
 		return err
 	}
-	txn.strPendingWrites[string(key)] = pendingWrite{typ: data.LogRecordNormal, LogPos: pos}
+	txn.strPendingWrites[string(key)] = &pendingWrite{typ: data.LogRecordNormal, LogPos: pos}
 	return nil
 }
 
@@ -395,7 +395,7 @@ func (txn *Txn) Del(key []byte) error {
 	if err != nil {
 		return err
 	}
-	txn.strPendingWrites[string(key)] = pendingWrite{typ: data.LogRecordDeleted, LogPos: pos}
+	txn.strPendingWrites[string(key)] = &pendingWrite{typ: data.LogRecordDeleted, LogPos: pos}
 	return nil
 }
 

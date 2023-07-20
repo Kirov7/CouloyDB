@@ -631,7 +631,7 @@ func (db *DB) loadIndex(fids []int) error {
 //	return os.Remove(fileName)
 // }
 
-func (db *DB) getValueByPos(pos *data.LogPos) ([]byte, error) {
+func (db *DB) getLogRecordByPos(pos *data.LogPos) (*data.LogRecord, error) {
 	var dataFile *data.DataFile
 	if db.activityFile.FileId == pos.Fid {
 		dataFile = db.activityFile
@@ -648,6 +648,14 @@ func (db *DB) getValueByPos(pos *data.LogPos) ([]byte, error) {
 	}
 	if logRecord.Type == data.LogRecordDeleted {
 		return nil, public.ErrKeyNotFound
+	}
+	return logRecord, nil
+}
+
+func (db *DB) getValueByPos(pos *data.LogPos) ([]byte, error) {
+	logRecord, err := db.getLogRecordByPos(pos)
+	if err != nil {
+		return nil, err
 	}
 	return logRecord.Value, nil
 }

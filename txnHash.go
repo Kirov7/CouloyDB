@@ -31,9 +31,9 @@ func (txn *Txn) HSet(key, field, value []byte) error {
 	}
 
 	if _, ok := txn.hashPendingWrites[string(key)]; !ok {
-		txn.hashPendingWrites[string(key)] = make(map[string]pendingWrite)
+		txn.hashPendingWrites[string(key)] = make(map[string]*pendingWrite)
 	}
-	txn.hashPendingWrites[string(key)][string(field)] = pendingWrite{typ: data.LogRecordNormal, LogPos: pos}
+	txn.hashPendingWrites[string(key)][string(field)] = &pendingWrite{typ: data.LogRecordNormal, LogPos: pos}
 	return nil
 }
 
@@ -86,7 +86,7 @@ func (txn *Txn) HDel(key, field []byte) error {
 		return err
 	}
 
-	txn.hashPendingWrites[string(key)][string(field)] = pendingWrite{typ: data.LogRecordDeleted, LogPos: pos}
+	txn.hashPendingWrites[string(key)][string(field)] = &pendingWrite{typ: data.LogRecordDeleted, LogPos: pos}
 	return nil
 }
 
