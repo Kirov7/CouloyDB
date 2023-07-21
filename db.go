@@ -26,7 +26,7 @@ type DB struct {
 	activityFile *data.DataFile
 	oldFile      map[uint32]*data.DataFile
 	index        *index
-	indexLocks   map[data.DataStructureType]*sync.RWMutex
+	indexLocks   map[data.DataType]*sync.RWMutex
 	mu           *sync.RWMutex
 	txId         int64
 	isMerging    bool
@@ -72,7 +72,7 @@ func NewCouloyDB(opt Options) (*DB, error) {
 				dataIndex: make(map[string]meta.MemTable),
 			},
 		},
-		indexLocks: make(map[data.DataStructureType]*sync.RWMutex),
+		indexLocks: make(map[data.DataType]*sync.RWMutex),
 		mu:         new(sync.RWMutex),
 		mergeChan:  make(chan struct{}),
 		mergeDone:  make(chan error),
@@ -140,7 +140,7 @@ func (db *DB) put(key, value []byte, duration time.Duration) error {
 		Key:        encodeKeyWithTxId(key, public.NO_TX_ID),
 		Value:      value,
 		Type:       data.LogRecordNormal,
-		DSType:     data.String,
+		DataType:   data.String,
 		Expiration: expiration,
 	}
 
@@ -505,7 +505,7 @@ func (db *DB) loadIndex(fids []int) error {
 	expirations := make(map[string]int64)
 
 	updateIndex := func(key []byte, log *data.LogRecord, pos *data.LogPos) {
-		switch log.DSType {
+		switch log.DataType {
 		case data.String:
 			if log.Type == data.LogRecordDeleted {
 				delete(expirations, string(key))
@@ -689,7 +689,7 @@ func (db *DB) Notify(key string, value []byte, entryType eventType) {
 	}
 }
 
-func (db *DB) getIndexLockByType(typ data.DataStructureType) *sync.RWMutex {
+func (db *DB) getIndexLockByType(typ data.DataType) *sync.RWMutex {
 	switch typ {
 	case data.String:
 		return db.indexLocks[data.String]

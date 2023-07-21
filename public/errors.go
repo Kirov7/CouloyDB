@@ -17,4 +17,5 @@ var (
 	ErrTxnFnEmpty             = errors.New("the txn fn is empty")
 	ErrUpdateInReadOnlyTxn    = errors.New("the read only txn can't update")
 	ErrTxnArgsWrong           = errors.New("the args are wrong")
+	ErrListIsEmpty            = errors.New("the list is empty")
 )

@@ -167,7 +167,7 @@ type Txn struct {
 	hashPendingWrites map[string]map[string]*pendingWrite // key to field to pendingWrite
 
 	listMetaPendingWrites map[string]*pendingWrite
-	listDataPendingWrites map[string]map[float64]*pendingWrite
+	listDataPendingWrites map[string]map[string]*pendingWrite
 
 	waitCommit *wait.Wait
 }
@@ -181,7 +181,7 @@ func newTxn(readOnly bool, db *DB, isolationLevel IsolationLevel) *Txn {
 		strPendingWrites:      make(map[string]*pendingWrite),
 		hashPendingWrites:     make(map[string]map[string]*pendingWrite),
 		listMetaPendingWrites: make(map[string]*pendingWrite),
-		listDataPendingWrites: make(map[string]map[float64]*pendingWrite),
+		listDataPendingWrites: make(map[string]map[string]*pendingWrite),
 		waitCommit:            wait.NewWait(),
 	}
 }
@@ -275,6 +275,7 @@ func (txn *Txn) commit() error {
 		// traverse the operations done by the transaction on each data structure
 		go txn.updateStrIndex()
 		go txn.updateHashIndex()
+		go txn.updateListIndex()
 		txn.waitCommit.Wait()
 
 		// the real commit
@@ -337,6 +338,33 @@ func (txn *Txn) updateHashIndex() {
 	txn.waitCommit.Done()
 }
 
+func (txn *Txn) updateListIndex() {
+	txn.waitCommit.Add(1)
+	for key, pw := range txn.listMetaPendingWrites {
+		if pw.typ == data.LogRecordNormal {
+			txn.db.index.getListMetaIndex().Put([]byte(key), pw.LogPos)
+		} else {
+			txn.db.index.getListMetaIndex().Del([]byte(key))
+		}
+	}
+	for key, pendingWrites := range txn.listDataPendingWrites {
+		index, ok := txn.db.index.getListDataIndex(key)
+		if !ok {
+			txn.db.index.setListDataIndex(key, meta.NewMemTable(txn.db.options.IndexType))
+			index, _ = txn.db.index.getListDataIndex(key)
+		}
+
+		for seq, pw := range pendingWrites {
+			if pw.typ == data.LogRecordNormal {
+				index.Put([]byte(seq), pw.LogPos)
+			} else {
+				index.Del([]byte(seq))
+			}
+		}
+	}
+	txn.waitCommit.Done()
+}
+
 // Get the key first in pendingWrites, if not then in db
 func (txn *Txn) Get(key []byte) ([]byte, error) {
 	if len(key) == 0 {
@@ -368,10 +396,10 @@ func (txn *Txn) Set(key []byte, value []byte) error {
 		return public.ErrUpdateInReadOnlyTxn
 	}
 	logRecord := &data.LogRecord{
-		Key:    encodeKeyWithTxId(key, txn.startTs),
-		Value:  value,
-		Type:   data.LogRecordNormal,
-		DSType: data.String,
+		Key:      encodeKeyWithTxId(key, txn.startTs),
+		Value:    value,
+		Type:     data.LogRecordNormal,
+		DataType: data.String,
 	}
 	pos, err := txn.db.appendLogRecordWithLock(logRecord)
 	if err != nil {
@@ -387,9 +415,9 @@ func (txn *Txn) Del(key []byte) error {
 		return public.ErrUpdateInReadOnlyTxn
 	}
 	logRecord := &data.LogRecord{
-		Key:    encodeKeyWithTxId(key, txn.startTs),
-		Type:   data.LogRecordDeleted,
-		DSType: data.String,
+		Key:      encodeKeyWithTxId(key, txn.startTs),
+		Type:     data.LogRecordDeleted,
+		DataType: data.String,
 	}
 	pos, err := txn.db.appendLogRecordWithLock(logRecord)
 	if err != nil {

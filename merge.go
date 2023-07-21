@@ -100,7 +100,7 @@ func (db *DB) merge() error {
 			// parse and get the real key
 			realKey, _ := parseLogRecordKey(logRecord.Key)
 			var logRecordPos *data.LogPos
-			switch logRecord.DSType {
+			switch logRecord.DataType {
 			case data.String:
 				logRecordPos = db.index.getStrIndex().Get(realKey)
 			case data.Hash:

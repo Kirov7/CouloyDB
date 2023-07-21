@@ -19,10 +19,10 @@ func (txn *Txn) HSet(key, field, value []byte) error {
 	}
 
 	logRecord := &data.LogRecord{
-		Key:    encodeKeyWithTxId(encodeFieldKey(key, field), txn.startTs),
-		Value:  value,
-		Type:   data.LogRecordNormal,
-		DSType: data.Hash,
+		Key:      encodeKeyWithTxId(encodeFieldKey(key, field), txn.startTs),
+		Value:    value,
+		Type:     data.LogRecordNormal,
+		DataType: data.Hash,
 	}
 
 	pos, err := txn.db.appendLogRecordWithLock(logRecord)
@@ -77,9 +77,9 @@ func (txn *Txn) HDel(key, field []byte) error {
 	}
 
 	logRecord := &data.LogRecord{
-		Key:    encodeKeyWithTxId(encodeFieldKey(key, field), txn.startTs),
-		Type:   data.LogRecordDeleted,
-		DSType: data.Hash,
+		Key:      encodeKeyWithTxId(encodeFieldKey(key, field), txn.startTs),
+		Type:     data.LogRecordDeleted,
+		DataType: data.Hash,
 	}
 	pos, err := txn.db.appendLogRecordWithLock(logRecord)
 	if err != nil {

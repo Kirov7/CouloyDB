@@ -15,10 +15,10 @@ const (
 	LogRecordTxnBegin
 )
 
-type DataStructureType uint8
+type DataType uint8
 
 const (
-	String DataStructureType = iota
+	String DataType = iota
 	Hash
 	List
 	ListMeta
@@ -33,7 +33,7 @@ const (
 type LogRecordHeader struct {
 	crc        uint32
 	RecordType LogRecordType
-	DSType     DataStructureType
+	DataType   DataType
 	KeySize    uint32
 	ValueSize  uint32
 	Expiration int64
@@ -43,7 +43,7 @@ type LogRecord struct {
 	Key        []byte
 	Value      []byte
 	Type       LogRecordType
-	DSType     DataStructureType
+	DataType   DataType
 	Expiration int64
 }
 
@@ -59,7 +59,7 @@ func EncodeLogRecord(log *LogRecord) ([]byte, int64) {
 
 	// 5th byte store the Type
 	header[4] = log.Type
-	header[5] = byte(log.DSType)
+	header[5] = byte(log.DataType)
 	var index = 6
 	// after the 5th byte the data we store is the key, value and the expiration with varInt
 	index += binary.PutVarint(header[index:], int64(len(log.Key)))
@@ -90,7 +90,7 @@ func DecodeLogRecordHeader(buf []byte) (*LogRecordHeader, int64) {
 	header := &LogRecordHeader{
 		crc:        binary.LittleEndian.Uint32(buf[:4]),
 		RecordType: buf[4],
-		DSType:     DataStructureType(buf[5]),
+		DataType:   DataType(buf[5]),
 	}
 
 	var index = 6
