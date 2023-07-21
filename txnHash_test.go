@@ -126,7 +126,21 @@ func TestTxn_HGetAll(t *testing.T) {
 			assert.Equal(t, exceptedData[string(key)], allValue[i])
 		}
 
-		return nil
+		return err
+	})
+
+	exceptedData[string(bytex.GetTestKey(3))] = bytex.GetTestKey(3)
+
+	err = db.SerialTransaction(false, func(txn *Txn) error {
+		err = txn.HSet(bytex.GetTestKey(0), bytex.GetTestKey(3), bytex.GetTestKey(3))
+		assert.Nil(t, err)
+
+		allKey, allValue, err := txn.HGetAll(bytex.GetTestKey(0))
+		for i, key := range allKey {
+			assert.Equal(t, exceptedData[string(key)], allValue[i])
+		}
+
+		return err
 	})
 }
 

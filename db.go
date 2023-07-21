@@ -26,7 +26,7 @@ type DB struct {
 	activityFile *data.DataFile
 	oldFile      map[uint32]*data.DataFile
 	index        *index
-	indexLocks   map[data.DataStructureType]*sync.RWMutex
+	indexLocks   map[data.DataType]*sync.RWMutex
 	mu           *sync.RWMutex
 	txId         int64
 	isMerging    bool
@@ -67,8 +67,12 @@ func NewCouloyDB(opt Options) (*DB, error) {
 		index: &index{
 			hashIndex: make(map[string]meta.MemTable),
 			strIndex:  meta.NewMemTable(opt.IndexType),
+			listIndex: listIndex{
+				metaIndex: meta.NewMemTable(opt.IndexType),
+				dataIndex: make(map[string]meta.MemTable),
+			},
 		},
-		indexLocks: make(map[data.DataStructureType]*sync.RWMutex),
+		indexLocks: make(map[data.DataType]*sync.RWMutex),
 		mu:         new(sync.RWMutex),
 		mergeChan:  make(chan struct{}),
 		mergeDone:  make(chan error),
@@ -136,7 +140,7 @@ func (db *DB) put(key, value []byte, duration time.Duration) error {
 		Key:        encodeKeyWithTxId(key, public.NO_TX_ID),
 		Value:      value,
 		Type:       data.LogRecordNormal,
-		DSType:     data.String,
+		DataType:   data.String,
 		Expiration: expiration,
 	}
 
@@ -501,7 +505,7 @@ func (db *DB) loadIndex(fids []int) error {
 	expirations := make(map[string]int64)
 
 	updateIndex := func(key []byte, log *data.LogRecord, pos *data.LogPos) {
-		switch log.DSType {
+		switch log.DataType {
 		case data.String:
 			if log.Type == data.LogRecordDeleted {
 				delete(expirations, string(key))
@@ -524,6 +528,28 @@ func (db *DB) loadIndex(fids []int) error {
 				idx.Del(field)
 			} else {
 				idx.Put(field, pos)
+			}
+		case data.List:
+			realKey, seq, _, _ := decodeListKey(log.Key)
+			seqBuf, _ := seq.GobEncode()
+			var (
+				idx meta.MemTable
+				ok  bool
+			)
+			if idx, ok = db.index.getListDataIndex(string(realKey)); !ok {
+				db.index.setListDataIndex(string(realKey), meta.NewMemTable(db.options.IndexType))
+				idx, _ = db.index.getListDataIndex(string(realKey))
+			}
+			if log.Type == data.LogRecordDeleted {
+				idx.Del(seqBuf)
+			} else {
+				idx.Put(seqBuf, pos)
+			}
+		case data.ListMeta:
+			if log.Type == data.LogRecordDeleted {
+				db.index.getListMetaIndex().Del(key)
+			} else {
+				db.index.getListMetaIndex().Put(key, pos)
 			}
 		}
 	}
@@ -627,7 +653,7 @@ func (db *DB) loadIndex(fids []int) error {
 //	return os.Remove(fileName)
 // }
 
-func (db *DB) getValueByPos(pos *data.LogPos) ([]byte, error) {
+func (db *DB) getLogRecordByPos(pos *data.LogPos) (*data.LogRecord, error) {
 	var dataFile *data.DataFile
 	if db.activityFile.FileId == pos.Fid {
 		dataFile = db.activityFile
@@ -644,6 +670,14 @@ func (db *DB) getValueByPos(pos *data.LogPos) ([]byte, error) {
 	}
 	if logRecord.Type == data.LogRecordDeleted {
 		return nil, public.ErrKeyNotFound
+	}
+	return logRecord, nil
+}
+
+func (db *DB) getValueByPos(pos *data.LogPos) ([]byte, error) {
+	logRecord, err := db.getLogRecordByPos(pos)
+	if err != nil {
+		return nil, err
 	}
 	return logRecord.Value, nil
 }
@@ -677,7 +711,7 @@ func (db *DB) Notify(key string, value []byte, entryType eventType) {
 	}
 }
 
-func (db *DB) getIndexLockByType(typ data.DataStructureType) *sync.RWMutex {
+func (db *DB) getIndexLockByType(typ data.DataType) *sync.RWMutex {
 	switch typ {
 	case data.String:
 		return db.indexLocks[data.String]

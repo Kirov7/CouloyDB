@@ -3,6 +3,7 @@ package CouloyDB
 import (
 	"container/heap"
 	"github.com/Kirov7/CouloyDB/data"
+	"github.com/Kirov7/CouloyDB/meta"
 	"github.com/Kirov7/CouloyDB/public"
 	"github.com/Kirov7/CouloyDB/public/utils/wait"
 	"strconv"
@@ -162,8 +163,11 @@ type Txn struct {
 
 	// The data written is stored temporarily in pendingWrites instead of memtable
 	// Record operations on each data structure separately
-	strPendingWrites  map[string]pendingWrite
-	hashPendingWrites map[string]map[string]pendingWrite // key to field to pendingWrite
+	strPendingWrites  map[string]*pendingWrite
+	hashPendingWrites map[string]map[string]*pendingWrite // key to field to pendingWrite
+
+	listMetaPendingWrites map[string]*pendingWrite
+	listDataPendingWrites map[string]map[string]*pendingWrite
 
 	waitCommit *wait.Wait
 }
@@ -171,12 +175,14 @@ type Txn struct {
 func newTxn(readOnly bool, db *DB, isolationLevel IsolationLevel) *Txn {
 
 	return &Txn{
-		readOnly:          readOnly,
-		db:                db,
-		isolationLevel:    isolationLevel,
-		strPendingWrites:  make(map[string]pendingWrite),
-		hashPendingWrites: make(map[string]map[string]pendingWrite),
-		waitCommit:        wait.NewWait(),
+		readOnly:              readOnly,
+		db:                    db,
+		isolationLevel:        isolationLevel,
+		strPendingWrites:      make(map[string]*pendingWrite),
+		hashPendingWrites:     make(map[string]map[string]*pendingWrite),
+		listMetaPendingWrites: make(map[string]*pendingWrite),
+		listDataPendingWrites: make(map[string]map[string]*pendingWrite),
+		waitCommit:            wait.NewWait(),
 	}
 }
 
@@ -267,8 +273,9 @@ func (txn *Txn) commit() error {
 		}
 
 		// traverse the operations done by the transaction on each data structure
-		go txn.setStrIndex()
-		go txn.setHashIndex()
+		go txn.updateStrIndex()
+		go txn.updateHashIndex()
+		go txn.updateListIndex()
 		txn.waitCommit.Wait()
 
 		// the real commit
@@ -296,7 +303,7 @@ func (txn *Txn) rollback() {
 	}
 }
 
-func (txn *Txn) setStrIndex() {
+func (txn *Txn) updateStrIndex() {
 	txn.waitCommit.Add(1)
 	for key, pw := range txn.strPendingWrites {
 		if pw.typ == data.LogRecordNormal {
@@ -309,16 +316,49 @@ func (txn *Txn) setStrIndex() {
 	txn.waitCommit.Done()
 }
 
-func (txn *Txn) setHashIndex() {
+func (txn *Txn) updateHashIndex() {
 	txn.waitCommit.Add(1)
 	for key, pendingWrites := range txn.hashPendingWrites {
-		idx, _ := txn.db.index.getHashIndex(key)
+
+		idx, ok := txn.db.index.getHashIndex(key)
+		if !ok {
+			txn.db.index.setHashIndex(key, meta.NewMemTable(txn.db.options.IndexType))
+			idx, _ = txn.db.index.getHashIndex(key)
+		}
+
 		for field, pw := range pendingWrites {
 			if pw.typ == data.LogRecordNormal {
 				idx.Put([]byte(field), pw.LogPos)
 			}
 			if pw.typ == data.LogRecordDeleted {
 				idx.Del([]byte(field))
+			}
+		}
+	}
+	txn.waitCommit.Done()
+}
+
+func (txn *Txn) updateListIndex() {
+	txn.waitCommit.Add(1)
+	for key, pw := range txn.listMetaPendingWrites {
+		if pw.typ == data.LogRecordNormal {
+			txn.db.index.getListMetaIndex().Put([]byte(key), pw.LogPos)
+		} else {
+			txn.db.index.getListMetaIndex().Del([]byte(key))
+		}
+	}
+	for key, pendingWrites := range txn.listDataPendingWrites {
+		index, ok := txn.db.index.getListDataIndex(key)
+		if !ok {
+			txn.db.index.setListDataIndex(key, meta.NewMemTable(txn.db.options.IndexType))
+			index, _ = txn.db.index.getListDataIndex(key)
+		}
+
+		for seq, pw := range pendingWrites {
+			if pw.typ == data.LogRecordNormal {
+				index.Put([]byte(seq), pw.LogPos)
+			} else {
+				index.Del([]byte(seq))
 			}
 		}
 	}
@@ -356,16 +396,16 @@ func (txn *Txn) Set(key []byte, value []byte) error {
 		return public.ErrUpdateInReadOnlyTxn
 	}
 	logRecord := &data.LogRecord{
-		Key:    encodeKeyWithTxId(key, txn.startTs),
-		Value:  value,
-		Type:   data.LogRecordNormal,
-		DSType: data.String,
+		Key:      encodeKeyWithTxId(key, txn.startTs),
+		Value:    value,
+		Type:     data.LogRecordNormal,
+		DataType: data.String,
 	}
 	pos, err := txn.db.appendLogRecordWithLock(logRecord)
 	if err != nil {
 		return err
 	}
-	txn.strPendingWrites[string(key)] = pendingWrite{typ: data.LogRecordNormal, LogPos: pos}
+	txn.strPendingWrites[string(key)] = &pendingWrite{typ: data.LogRecordNormal, LogPos: pos}
 	return nil
 }
 
@@ -375,15 +415,15 @@ func (txn *Txn) Del(key []byte) error {
 		return public.ErrUpdateInReadOnlyTxn
 	}
 	logRecord := &data.LogRecord{
-		Key:    encodeKeyWithTxId(key, txn.startTs),
-		Type:   data.LogRecordDeleted,
-		DSType: data.String,
+		Key:      encodeKeyWithTxId(key, txn.startTs),
+		Type:     data.LogRecordDeleted,
+		DataType: data.String,
 	}
 	pos, err := txn.db.appendLogRecordWithLock(logRecord)
 	if err != nil {
 		return err
 	}
-	txn.strPendingWrites[string(key)] = pendingWrite{typ: data.LogRecordDeleted, LogPos: pos}
+	txn.strPendingWrites[string(key)] = &pendingWrite{typ: data.LogRecordDeleted, LogPos: pos}
 	return nil
 }
 

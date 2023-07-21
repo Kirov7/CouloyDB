@@ -100,14 +100,22 @@ func (db *DB) merge() error {
 			// parse and get the real key
 			realKey, _ := parseLogRecordKey(logRecord.Key)
 			var logRecordPos *data.LogPos
-			switch logRecord.DSType {
+			switch logRecord.DataType {
 			case data.String:
 				logRecordPos = db.index.getStrIndex().Get(realKey)
 			case data.Hash:
-				realKey, field := decodeFieldKey(realKey)
-				if idx, ok := db.index.getHashIndex(string(realKey)); ok {
+				decodedKey, field := decodeFieldKey(realKey)
+				if idx, ok := db.index.getHashIndex(string(decodedKey)); ok {
 					logRecordPos = idx.Get(field)
 				}
+			case data.List:
+				decodedKey, seq, _, _ := decodeListKey(realKey)
+				if idx, ok := db.index.getListDataIndex(string(decodedKey)); ok {
+					seqBuf, _ := seq.GobEncode()
+					logRecordPos = idx.Get(seqBuf)
+				}
+			case data.ListMeta:
+				logRecordPos = db.index.getListMetaIndex().Get(realKey)
 			}
 			// compare with the memTable, if the already exist in memTable then rewrite it
 			if logRecordPos != nil && logRecordPos.Fid == oldFile.FileId && logRecordPos.Offset == offset {

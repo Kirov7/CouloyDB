@@ -89,7 +89,7 @@ func (df *DataFile) ReadLogRecord(offset int64) (*LogRecord, int64, error) {
 	keySize, valueSize := int64(header.KeySize), int64(header.ValueSize)
 	var recordSize = headerSize + keySize + valueSize
 
-	logRecord := &LogRecord{Type: header.RecordType, DSType: header.DSType, Expiration: header.Expiration}
+	logRecord := &LogRecord{Type: header.RecordType, DataType: header.DataType, Expiration: header.Expiration}
 	// read the real k-v
 	if keySize > 0 || valueSize > 0 {
 		kvBuf, err := df.readNBytes(keySize+valueSize, offset+headerSize)
