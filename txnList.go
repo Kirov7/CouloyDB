@@ -144,6 +144,9 @@ func (txn *Txn) pop(key []byte, isLeft bool) ([]byte, error) {
 	if txn.readOnly {
 		return nil, public.ErrUpdateInReadOnlyTxn
 	}
+	if _, ok := txn.listDataPendingWrites[string(key)]; !ok {
+		txn.listDataPendingWrites[string(key)] = make(map[string]*pendingWrite)
+	}
 
 	headSeq, tailSeq, err := txn.getListMeta(key)
 	if err != nil {
