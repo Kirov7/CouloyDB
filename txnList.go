@@ -16,11 +16,11 @@ func (txn *Txn) RPush(key []byte, values [][]byte) error {
 }
 
 func (txn *Txn) LPop(key []byte) ([]byte, error) {
-	return nil, nil
+	return txn.pop(key, true)
 }
 
 func (txn *Txn) RPop(key []byte) ([]byte, error) {
-	return nil, nil
+	return txn.pop(key, false)
 }
 
 func (txn *Txn) LLen(key []byte) (int, error) {
@@ -138,6 +138,76 @@ func (txn *Txn) push(key []byte, values [][]byte, isLeft bool) error {
 	txn.listMetaPendingWrites[string(key)] = &pendingWrite{typ: data.LogRecordNormal, LogPos: logPos}
 
 	return nil
+}
+
+func (txn *Txn) pop(key []byte, isLeft bool) ([]byte, error) {
+	if txn.readOnly {
+		return nil, public.ErrUpdateInReadOnlyTxn
+	}
+
+	headSeq, tailSeq, err := txn.getListMeta(key)
+	if err != nil {
+		return nil, err
+	}
+
+	var value []byte
+
+	logPos := txn.getLogPosByLeftOrRight(key, headSeq, tailSeq, isLeft)
+	if logPos != nil {
+		logRecord, err := txn.db.getLogRecordByPos(logPos)
+		if err != nil {
+			return nil, err
+		}
+		value = logRecord.Value
+		realKey, _ := parseLogRecordKey(logRecord.Key)
+		_, seq, prev, next := decodeListKey(realKey)
+
+		// append a delete record
+		logRecord = &data.LogRecord{
+			Key:      encodeKeyWithTxId(realKey, txn.startTs),
+			Type:     data.LogRecordDeleted,
+			DataType: data.List,
+		}
+		logPos, err = txn.db.appendLogRecordWithLock(logRecord)
+		if err != nil {
+			return nil, err
+		}
+
+		buf, err := seq.GobEncode()
+		if err != nil {
+			return nil, err
+		}
+		txn.listDataPendingWrites[string(key)][string(buf)] = &pendingWrite{typ: data.LogRecordDeleted, LogPos: logPos}
+
+		if isLeft {
+			headSeq = next
+		} else {
+			tailSeq = prev
+		}
+
+		listMetaLogRecord := &data.LogRecord{
+			Key:      encodeKeyWithTxId(key, txn.startTs),
+			DataType: data.ListMeta,
+		}
+
+		if headSeq.Cmp(tailSeq) != 1 {
+			listMetaLogRecord.Value = encodeListMeta(headSeq, tailSeq)
+			listMetaLogRecord.Type = data.LogRecordNormal
+		} else {
+			listMetaLogRecord.Type = data.LogRecordDeleted
+		}
+
+		logPos, err = txn.db.appendLogRecordWithLock(listMetaLogRecord)
+		if err != nil {
+			return nil, err
+		}
+
+		txn.listMetaPendingWrites[string(key)] = &pendingWrite{typ: listMetaLogRecord.Type, LogPos: logPos}
+
+		return value, nil
+	}
+
+	return nil, public.ErrListIsEmpty
 }
 
 func (txn *Txn) allocPushSeq(headSeq, tailSeq *big.Float, left bool) *big.Float {
