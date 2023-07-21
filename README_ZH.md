@@ -142,6 +142,12 @@ func TestTxn(t *testing.T) {
   - HGETALL
   - HMSET
   - HMGET
+- List:
+  - LPUSH
+  - RPUSH
+  - LPOP
+  - RPOP
+
 
 未来我们将会支持更多的数据结构和操作。
 
@@ -284,7 +290,7 @@ func TestKuloy(t *testing.T) {
 - [ ] 扩展构建存储引擎层的数据结构，接口与 Redis 相同：
   - [x] String
   - [x] Hash
-  - [ ] List
+  - [x] List
   - [ ] Set
   - [ ] ZSet
   - [ ] Bitmap

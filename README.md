@@ -143,6 +143,12 @@ You can safely manipulate the database by calling methods of `Txn`.
   - HGETALL
   - HMSET
   - HMGET
+- List:
+  - LPUSH
+  - RPUSH
+  - LPOP
+  - RPOP
+
 
 In the future, we will support more data structures and operations.
 
@@ -285,7 +291,7 @@ func TestKuloy(t *testing.T) {
 - [ ] Extend to build data structures in storage engine layer with the same interface as Redis:
   - [x] String
   - [x] Hash
-  - [ ] List
+  - [x] List
   - [ ] Set
   - [ ] ZSet
   - [ ] Bitmap
