@@ -24,7 +24,26 @@ func (txn *Txn) RPop(key []byte) ([]byte, error) {
 }
 
 func (txn *Txn) LLen(key []byte) (int, error) {
-	return 0, nil
+	idx, ok := txn.db.index.getListDataIndex(string(key))
+	var l int
+	if ok {
+		l = idx.Count()
+	}
+	if pendingWrites, has := txn.listDataPendingWrites[string(key)]; has {
+		for seq, pw := range pendingWrites {
+			if pw.typ == data.LogRecordDeleted {
+				l--
+			} else if ok {
+				if pos := idx.Get([]byte(seq)); pos == nil {
+					l++
+				}
+			} else {
+				l++
+			}
+		}
+		return l, nil
+	}
+	return 0, public.ErrKeyNotFound
 }
 
 func (txn *Txn) LIndex(key []byte, index int) ([]byte, error) {

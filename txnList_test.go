@@ -159,3 +159,48 @@ func TestTxn_List_Restart(t *testing.T) {
 
 	assert.Nil(t, err)
 }
+
+func TestTxn_LLen(t *testing.T) {
+	db, err := NewCouloyDB(DefaultOptions())
+	assert.Nil(t, err)
+	assert.NotNil(t, db)
+	defer destroyCouloyDB(db)
+
+	err = db.SerialTransaction(false, func(txn *Txn) error {
+		l, err := txn.LLen(bytex.GetTestKey(0))
+		assert.Equal(t, 0, l)
+		assert.NotNil(t, err)
+
+		err = txn.RPush(bytex.GetTestKey(0), [][]byte{bytex.GetTestKey(0), bytex.GetTestKey(1)})
+		assert.Nil(t, err)
+
+		l, err = txn.LLen(bytex.GetTestKey(0))
+		assert.Nil(t, err)
+		assert.Equal(t, 2, l)
+
+		return err
+	})
+
+	err = db.SerialTransaction(false, func(txn *Txn) error {
+		err := txn.RPush(bytex.GetTestKey(0), [][]byte{bytex.GetTestKey(2)})
+		assert.Nil(t, err)
+
+		l, err := txn.LLen(bytex.GetTestKey(0))
+		assert.Nil(t, err)
+		assert.Equal(t, 3, l)
+
+		return err
+	})
+
+	err = db.SerialTransaction(false, func(txn *Txn) error {
+		value, err := txn.LPop(bytex.GetTestKey(0))
+		assert.Nil(t, err)
+		assert.Equal(t, bytex.GetTestKey(0), value)
+
+		l, err := txn.LLen(bytex.GetTestKey(0))
+		assert.Nil(t, err)
+		assert.Equal(t, 2, l)
+
+		return err
+	})
+}
