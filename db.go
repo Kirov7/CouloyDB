@@ -529,6 +529,28 @@ func (db *DB) loadIndex(fids []int) error {
 			} else {
 				idx.Put(field, pos)
 			}
+		case data.List:
+			realKey, seq, _, _ := decodeListKey(log.Key)
+			seqBuf, _ := seq.GobEncode()
+			var (
+				idx meta.MemTable
+				ok  bool
+			)
+			if idx, ok = db.index.getListDataIndex(string(realKey)); !ok {
+				db.index.setListDataIndex(string(realKey), meta.NewMemTable(db.options.IndexType))
+				idx, _ = db.index.getListDataIndex(string(realKey))
+			}
+			if log.Type == data.LogRecordDeleted {
+				idx.Del(seqBuf)
+			} else {
+				idx.Put(seqBuf, pos)
+			}
+		case data.ListMeta:
+			if log.Type == data.LogRecordDeleted {
+				db.index.getListMetaIndex().Del(key)
+			} else {
+				db.index.getListMetaIndex().Put(key, pos)
+			}
 		}
 	}
 
