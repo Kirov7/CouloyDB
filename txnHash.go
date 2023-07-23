@@ -173,6 +173,75 @@ func (txn *Txn) HMSet(key []byte, args [][]byte) error {
 	return nil
 }
 
+func (txn *Txn) HKeys(key []byte) ([][]byte, error) {
+	fields := make([][]byte, 0)
+	for field, pw := range txn.hashPendingWrites[string(key)] {
+		if pw.typ != data.LogRecordDeleted {
+			fields = append(fields, []byte(field))
+		}
+	}
+
+	if hash, ok := txn.db.index.getHashIndex(string(key)); ok {
+		iterator := hash.Iterator(false)
+		for iterator.Rewind(); iterator.Valid(); iterator.Next() {
+			if _, ok := txn.hashPendingWrites[string(key)][string(iterator.Key())]; ok {
+				continue
+			}
+			fields = append(fields, iterator.Key())
+		}
+	}
+	if len(fields) == 0 {
+		return [][]byte{}, public.ErrKeyNotFound
+	}
+	return fields, nil
+}
+
+func (txn *Txn) HValues(key []byte) ([][]byte, error) {
+	values := make([][]byte, 0)
+	for _, pw := range txn.hashPendingWrites[string(key)] {
+		if pw.typ != data.LogRecordDeleted {
+			v, err := txn.db.getValueByPos(pw.LogPos)
+			if err != nil {
+				return nil, err
+			}
+			values = append(values, v)
+		}
+	}
+	if hash, ok := txn.db.index.getHashIndex(string(key)); ok {
+		iterator := hash.Iterator(false)
+		for iterator.Rewind(); iterator.Valid(); iterator.Next() {
+			if _, ok := txn.hashPendingWrites[string(key)][string(iterator.Key())]; ok {
+				continue
+			}
+			v, err := txn.db.getValueByPos(iterator.Value())
+			if err != nil {
+				return nil, err
+			}
+			values = append(values, v)
+		}
+	}
+	if len(values) == 0 {
+		return [][]byte{}, public.ErrKeyNotFound
+	}
+	return values, nil
+}
+
+func (txn *Txn) HStrLen(key, field []byte) (int64, error) {
+	v, err := txn.HGet(key, field)
+	if err != nil {
+		return -1, public.ErrKeyNotFound
+	}
+	return int64(len(string(v))), nil
+}
+
+func (txn *Txn) HLen(key []byte) (int64, error) {
+	fields, err := txn.HKeys(key)
+	if err != nil {
+		return -1, err
+	}
+	return int64(len(fields)), nil
+}
+
 func encodeFieldKey(key, field []byte) []byte {
 	header := make([]byte, binary.MaxVarintLen64*2)
 	var index int

@@ -221,3 +221,52 @@ func TestTxn_Hash_Restart(t *testing.T) {
 
 	destroyCouloyDB(db)
 }
+
+func TestTxn_HStrLen(t *testing.T) {
+	db, err := NewCouloyDB(DefaultOptions())
+	assert.Nil(t, err)
+	assert.NotNil(t, db)
+	defer destroyCouloyDB(db)
+
+	err = db.SerialTransaction(false, func(txn *Txn) error {
+		err = txn.HSet(bytex.GetTestKey(0), bytex.GetTestKey(0), bytex.GetTestKey(0))
+		assert.Nil(t, err)
+
+		v, err := txn.HGet(bytex.GetTestKey(0), bytex.GetTestKey(0))
+		assert.Nil(t, err)
+
+		strlen, err := txn.HStrLen(bytex.GetTestKey(0), bytex.GetTestKey(0))
+		assert.Nil(t, err)
+
+		assert.Equal(t, strlen, int64(len(v)))
+
+		return err
+	})
+	assert.Nil(t, err)
+}
+func TestTxn_HKEYSAVALUES(t *testing.T) {
+	db, err := NewCouloyDB(DefaultOptions())
+	assert.Nil(t, err)
+	assert.NotNil(t, db)
+	defer destroyCouloyDB(db)
+
+	err = db.SerialTransaction(false, func(txn *Txn) error {
+		err = txn.HSet(bytex.GetTestKey(0), []byte("1"), []byte("1"))
+		assert.Nil(t, err)
+		err = txn.HSet(bytex.GetTestKey(0), []byte("2"), []byte("2"))
+		assert.Nil(t, err)
+		err = txn.HSet(bytex.GetTestKey(0), []byte("3"), []byte("3"))
+		assert.Nil(t, err)
+
+		files, err := txn.HKeys(bytex.GetTestKey(0))
+		assert.Nil(t, err)
+		values, err := txn.HValues(bytex.GetTestKey(0))
+		assert.Nil(t, err)
+		filesLabel, valuesLabel, err := txn.HGetAll(bytex.GetTestKey(0))
+		assert.Nil(t, err)
+		assert.Equal(t, files, filesLabel)
+		assert.Equal(t, values, valuesLabel)
+		return err
+	})
+	assert.Nil(t, err)
+}
