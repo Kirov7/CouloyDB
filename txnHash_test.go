@@ -4,7 +4,6 @@ import (
 	"github.com/Kirov7/CouloyDB/public"
 	"github.com/Kirov7/CouloyDB/public/utils/bytex"
 	"github.com/stretchr/testify/assert"
-	"sort"
 	"testing"
 )
 
@@ -228,28 +227,29 @@ func TestTxn_HStrLen(t *testing.T) {
 	assert.Nil(t, err)
 	assert.NotNil(t, db)
 	defer destroyCouloyDB(db)
-
+	var StrLen int64
 	err = db.SerialTransaction(false, func(txn *Txn) error {
 		err = txn.HSet(bytex.GetTestKey(0), bytex.GetTestKey(0), bytex.GetTestKey(0))
 		assert.Nil(t, err)
-
 		v, err := txn.HGet(bytex.GetTestKey(0), bytex.GetTestKey(0))
 		assert.Nil(t, err)
-
-		strlen, err := txn.HStrLen(bytex.GetTestKey(0), bytex.GetTestKey(0))
+		StrLen, err = txn.HStrLen(bytex.GetTestKey(0), bytex.GetTestKey(0))
 		assert.Nil(t, err)
-
-		assert.Equal(t, strlen, int64(len(v)))
-
+		assert.Equal(t, StrLen, int64(len(v)))
 		return err
 	})
 	assert.Nil(t, err)
-}
-
-func bytes_sort(data [][]byte) {
-	sort.Slice(data, func(i, j int) bool {
-		return string(data[i]) < string(data[j])
+	err = db.SerialTransaction(false, func(txn *Txn) error {
+		v, err := txn.HGet(bytex.GetTestKey(0), bytex.GetTestKey(0))
+		assert.Nil(t, err)
+		assert.Equal(t, StrLen, int64(len(v)))
+		StrLen, err = txn.HStrLen(bytex.GetTestKey(0), bytex.GetTestKey(0))
+		assert.Nil(t, err)
+		assert.Equal(t, StrLen, int64(len(v)))
+		return err
 	})
+	assert.Nil(t, err)
+
 }
 
 func TestTxn_HKEYS_HVALUES(t *testing.T) {
@@ -257,7 +257,7 @@ func TestTxn_HKEYS_HVALUES(t *testing.T) {
 	assert.Nil(t, err)
 	assert.NotNil(t, db)
 	defer destroyCouloyDB(db)
-
+	var files, values, filesLabel, valuesLabel [][]byte
 	err = db.SerialTransaction(false, func(txn *Txn) error {
 		err = txn.HSet(bytex.GetTestKey(0), []byte("1"), []byte("1"))
 		assert.Nil(t, err)
@@ -265,29 +265,41 @@ func TestTxn_HKEYS_HVALUES(t *testing.T) {
 		assert.Nil(t, err)
 		err = txn.HSet(bytex.GetTestKey(0), []byte("3"), []byte("3"))
 		assert.Nil(t, err)
-		files, err := txn.HKeys(bytex.GetTestKey(0))
-		bytes_sort(files)
+		files, err = txn.HKeys(bytex.GetTestKey(0))
+		bytex.BytesSort(files)
 		assert.Nil(t, err)
-		values, err := txn.HValues(bytex.GetTestKey(0))
-		bytes_sort(values)
+		values, err = txn.HValues(bytex.GetTestKey(0))
+		bytex.BytesSort(values)
 		assert.Nil(t, err)
-		filesLabel, valuesLabel, err := txn.HGetAll(bytex.GetTestKey(0))
-		bytes_sort(filesLabel)
-		bytes_sort(valuesLabel)
+		filesLabel, valuesLabel, err = txn.HGetAll(bytex.GetTestKey(0))
+		bytex.BytesSort(filesLabel)
+		bytex.BytesSort(valuesLabel)
 		assert.Nil(t, err)
 		assert.Equal(t, files, filesLabel)
 		assert.Equal(t, values, valuesLabel)
 		err = txn.HDel(bytex.GetTestKey(0), []byte("1"))
 		assert.Nil(t, err)
 		files, err = txn.HKeys(bytex.GetTestKey(0))
-		bytes_sort(files)
+		bytex.BytesSort(files)
 		assert.Nil(t, err)
 		values, err = txn.HValues(bytex.GetTestKey(0))
-		bytes_sort(values)
+		bytex.BytesSort(values)
 		assert.Nil(t, err)
 		filesLabel, valuesLabel, err = txn.HGetAll(bytex.GetTestKey(0))
-		bytes_sort(filesLabel)
-		bytes_sort(valuesLabel)
+		bytex.BytesSort(filesLabel)
+		bytex.BytesSort(valuesLabel)
+		assert.Nil(t, err)
+		assert.Equal(t, files, filesLabel)
+		assert.Equal(t, values, valuesLabel)
+		return err
+	})
+	assert.Nil(t, err)
+	err = db.SerialTransaction(false, func(txn *Txn) error {
+		files, err = txn.HKeys(bytex.GetTestKey(0))
+		bytex.BytesSort(files)
+		assert.Nil(t, err)
+		values, err = txn.HValues(bytex.GetTestKey(0))
+		bytex.BytesSort(values)
 		assert.Nil(t, err)
 		assert.Equal(t, files, filesLabel)
 		assert.Equal(t, values, valuesLabel)
@@ -301,8 +313,9 @@ func TestTxn_HLEN(t *testing.T) {
 	assert.Nil(t, err)
 	assert.NotNil(t, db)
 	defer destroyCouloyDB(db)
+	var StrLen int64
+	byteExample := [][]byte{[]byte("01"), []byte("12"), []byte("23")}
 	err = db.SerialTransaction(false, func(txn *Txn) error {
-		byteExample := [][]byte{[]byte("01"), []byte("12"), []byte("23")}
 		err = txn.HSet(byteExample[0], byteExample[0], byteExample[0])
 		assert.Nil(t, err)
 		err = txn.HSet(byteExample[0], byteExample[1], byteExample[1])
@@ -310,26 +323,33 @@ func TestTxn_HLEN(t *testing.T) {
 		err = txn.HSet(byteExample[0], byteExample[2], byteExample[2])
 		assert.Nil(t, err)
 		//new test
-		fileLen, err := txn.HLen(byteExample[0])
+		StrLen, err = txn.HLen(byteExample[0])
 		assert.Nil(t, err)
-		filesLabel, _, err := txn.HGetAll(byteExample[0])
+		StrLenLabel, _, err := txn.HGetAll(byteExample[0])
 		assert.Nil(t, err)
-		assert.Equal(t, fileLen, int64(len(filesLabel)))
+		assert.Equal(t, StrLen, int64(len(StrLenLabel)))
 		//del test
 		err = txn.HDel(byteExample[0], byteExample[2])
 		assert.Nil(t, err)
-		fileLen, err = txn.HLen(byteExample[0])
+		StrLen, err = txn.HLen(byteExample[0])
 		assert.Nil(t, err)
-		filesLabel, _, err = txn.HGetAll(byteExample[0])
+		StrLenLabel, _, err = txn.HGetAll(byteExample[0])
 		assert.Nil(t, err)
-		assert.Equal(t, fileLen, int64(len(filesLabel)))
+		assert.Equal(t, StrLen, int64(len(StrLenLabel)))
 		//update test
 		err = txn.HSet(byteExample[0], byteExample[0], byteExample[0])
-		fileLen, err = txn.HLen(byteExample[0])
+		StrLen, err = txn.HLen(byteExample[0])
 		assert.Nil(t, err)
-		filesLabel, _, err = txn.HGetAll(byteExample[0])
+		StrLenLabel, _, err = txn.HGetAll(byteExample[0])
 		assert.Nil(t, err)
-		assert.Equal(t, fileLen, int64(len(filesLabel)))
+		assert.Equal(t, StrLen, int64(len(StrLenLabel)))
+		return err
+	})
+	assert.Nil(t, err)
+	err = db.SerialTransaction(false, func(txn *Txn) error {
+		StrLenLabel, _, err := txn.HGetAll(byteExample[0])
+		assert.Nil(t, err)
+		assert.Equal(t, StrLen, int64(len(StrLenLabel)))
 		return err
 	})
 	assert.Nil(t, err)
