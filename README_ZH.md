@@ -142,6 +142,10 @@ func TestTxn(t *testing.T) {
   - HGETALL
   - HMSET
   - HMGET
+  - HLEN
+  - HVALUES
+  - HKEYS
+  - HSTRLEN
 - List:
   - LPUSH
   - RPUSH

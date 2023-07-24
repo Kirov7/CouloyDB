@@ -143,6 +143,10 @@ You can safely manipulate the database by calling methods of `Txn`.
   - HGETALL
   - HMSET
   - HMGET
+  - HLEN
+  - HVALUES
+  - HKEYS
+  - HSTRLEN
 - List:
   - LPUSH
   - RPUSH
