@@ -11,7 +11,7 @@ func TestTxn_List_Push(t *testing.T) {
 	db, err := NewCouloyDB(DefaultOptions())
 	assert.Nil(t, err)
 	assert.NotNil(t, db)
-	destroyCouloyDB(db)
+	defer destroyCouloyDB(db)
 
 	err = db.SerialTransaction(false, func(txn *Txn) error {
 		// 0
