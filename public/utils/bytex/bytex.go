@@ -3,6 +3,7 @@ package bytex
 import (
 	"fmt"
 	"golang.org/x/exp/rand"
+	"sort"
 )
 
 const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
@@ -17,4 +18,10 @@ func RandomBytes(length int) []byte {
 		b[i] = charset[rand.Intn(len(charset))]
 	}
 	return b
+}
+
+func BytesSort(data [][]byte) {
+	sort.Slice(data, func(i, j int) bool {
+		return string(data[i]) < string(data[j])
+	})
 }
