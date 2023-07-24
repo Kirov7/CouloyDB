@@ -4,6 +4,7 @@ import (
 	"github.com/Kirov7/CouloyDB/public"
 	"github.com/Kirov7/CouloyDB/public/utils/bytex"
 	"github.com/stretchr/testify/assert"
+	"sort"
 	"testing"
 )
 
@@ -244,7 +245,14 @@ func TestTxn_HStrLen(t *testing.T) {
 	})
 	assert.Nil(t, err)
 }
-func TestTxn_HKEYSAVALUES(t *testing.T) {
+
+func bytes_sort(data [][]byte) {
+	sort.Slice(data, func(i, j int) bool {
+		return string(data[i]) < string(data[j])
+	})
+}
+
+func TestTxn_HKEYS_HVALUES(t *testing.T) {
 	db, err := NewCouloyDB(DefaultOptions())
 	assert.Nil(t, err)
 	assert.NotNil(t, db)
@@ -257,15 +265,71 @@ func TestTxn_HKEYSAVALUES(t *testing.T) {
 		assert.Nil(t, err)
 		err = txn.HSet(bytex.GetTestKey(0), []byte("3"), []byte("3"))
 		assert.Nil(t, err)
-
 		files, err := txn.HKeys(bytex.GetTestKey(0))
+		bytes_sort(files)
 		assert.Nil(t, err)
 		values, err := txn.HValues(bytex.GetTestKey(0))
+		bytes_sort(values)
 		assert.Nil(t, err)
 		filesLabel, valuesLabel, err := txn.HGetAll(bytex.GetTestKey(0))
+		bytes_sort(filesLabel)
+		bytes_sort(valuesLabel)
 		assert.Nil(t, err)
 		assert.Equal(t, files, filesLabel)
 		assert.Equal(t, values, valuesLabel)
+		err = txn.HDel(bytex.GetTestKey(0), []byte("1"))
+		assert.Nil(t, err)
+		files, err = txn.HKeys(bytex.GetTestKey(0))
+		bytes_sort(files)
+		assert.Nil(t, err)
+		values, err = txn.HValues(bytex.GetTestKey(0))
+		bytes_sort(values)
+		assert.Nil(t, err)
+		filesLabel, valuesLabel, err = txn.HGetAll(bytex.GetTestKey(0))
+		bytes_sort(filesLabel)
+		bytes_sort(valuesLabel)
+		assert.Nil(t, err)
+		assert.Equal(t, files, filesLabel)
+		assert.Equal(t, values, valuesLabel)
+		return err
+	})
+	assert.Nil(t, err)
+}
+
+func TestTxn_HLEN(t *testing.T) {
+	db, err := NewCouloyDB(DefaultOptions())
+	assert.Nil(t, err)
+	assert.NotNil(t, db)
+	defer destroyCouloyDB(db)
+	err = db.SerialTransaction(false, func(txn *Txn) error {
+		byteExample := [][]byte{[]byte("01"), []byte("12"), []byte("23")}
+		err = txn.HSet(byteExample[0], byteExample[0], byteExample[0])
+		assert.Nil(t, err)
+		err = txn.HSet(byteExample[0], byteExample[1], byteExample[1])
+		assert.Nil(t, err)
+		err = txn.HSet(byteExample[0], byteExample[2], byteExample[2])
+		assert.Nil(t, err)
+		//new test
+		fileLen, err := txn.HLen(byteExample[0])
+		assert.Nil(t, err)
+		filesLabel, _, err := txn.HGetAll(byteExample[0])
+		assert.Nil(t, err)
+		assert.Equal(t, fileLen, int64(len(filesLabel)))
+		//del test
+		err = txn.HDel(byteExample[0], byteExample[2])
+		assert.Nil(t, err)
+		fileLen, err = txn.HLen(byteExample[0])
+		assert.Nil(t, err)
+		filesLabel, _, err = txn.HGetAll(byteExample[0])
+		assert.Nil(t, err)
+		assert.Equal(t, fileLen, int64(len(filesLabel)))
+		//update test
+		err = txn.HSet(byteExample[0], byteExample[0], byteExample[0])
+		fileLen, err = txn.HLen(byteExample[0])
+		assert.Nil(t, err)
+		filesLabel, _, err = txn.HGetAll(byteExample[0])
+		assert.Nil(t, err)
+		assert.Equal(t, fileLen, int64(len(filesLabel)))
 		return err
 	})
 	assert.Nil(t, err)
