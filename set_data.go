@@ -9,15 +9,15 @@ import (
 	"github.com/Kirov7/CouloyDB/public/ds"
 )
 
-func (db *DB) SADD(key, value []byte) error {
-	return db.sADD(key, value, 0)
+func (db *DB) SADD(key, member []byte) error {
+	return db.sADD(key, member, 0)
 }
 
-func (db *DB) sADD(key, value []byte, duration time.Duration) error {
+func (db *DB) sADD(key, member []byte, duration time.Duration) error {
 	if err := checkKey(key); err != nil {
 		return err
 	}
-	if err := checkKey(value); err != nil {
+	if err := checkKey(member); err != nil {
 		return err
 	}
 
@@ -36,8 +36,7 @@ func (db *DB) sADD(key, value []byte, duration time.Duration) error {
 
 	logRecord := &data.LogRecord{
 		Key:        encodeKeyWithTxId(key, public.NO_TX_ID),
-		Value:      value,
-		Type:       data.LogRecordNormal,
+		Value:      member,
 		DSType:     data.Hash,
 		Expiration: expiration,
 	}
@@ -47,7 +46,7 @@ func (db *DB) sADD(key, value []byte, duration time.Duration) error {
 		return err
 	}
 
-	db.Notify(string(key), value, PutEvent)
+	db.Notify(string(key), member, PutEvent)
 
 	var hashIndex meta.MemTable
 	hashIndex, ok := db.index.getHashIndex(string(key))
@@ -56,7 +55,7 @@ func (db *DB) sADD(key, value []byte, duration time.Duration) error {
 		db.index.setHashIndex(string(key), hashIndex)
 	}
 
-	hashIndex.Put(value, pos)
+	hashIndex.Put(member, pos)
 	return nil
 }
 
@@ -73,9 +72,9 @@ func (db *DB) SMEMBERS(key []byte) ([][]byte, error) {
 		return nil, public.ErrKeyNotFound
 	}
 
-	values := db.ListMembers(key)
+	members := db.ListMembers(key)
 
-	return values, nil
+	return members, nil
 }
 
 func (db *DB) ListMembers(key []byte) [][]byte {
@@ -111,4 +110,31 @@ func (db *DB) SCARD(key []byte) (int, error) {
 	count := hashIndex.Count()
 
 	return count, nil
+}
+
+func (db *DB) SREM(key []byte, members ...[]byte) error {
+	if len(key) == 0 {
+		return public.ErrKeyIsEmpty
+	}
+
+	if len(members) == 0 {
+		return public.ErrKeyIsEmpty
+	}
+
+	db.getIndexLockByType(data.Hash).Lock()
+	defer db.getIndexLockByType(data.Hash).Unlock()
+
+	hashIndex, ok := db.index.getHashIndex(string(key))
+	if !ok {
+		return public.ErrKeyNotFound
+	}
+
+	for _, member := range members {
+		ok = hashIndex.Del(member)
+		if !ok {
+			return public.ErrKeyNotFound
+		}
+	}
+
+	return nil
 }
