@@ -94,3 +94,21 @@ func (db *DB) ListMembers(key []byte) [][]byte {
 	}
 	return values
 }
+
+func (db *DB) SCARD(key []byte) (int, error) {
+	if len(key) == 0 {
+		return 0, public.ErrKeyIsEmpty
+	}
+
+	db.getIndexLockByType(data.Hash).RLock()
+	defer db.getIndexLockByType(data.Hash).RUnlock()
+
+	hashIndex, ok := db.index.getHashIndex(string(key))
+	if !ok {
+		return 0, public.ErrKeyNotFound
+	}
+
+	count := hashIndex.Count()
+
+	return count, nil
+}
