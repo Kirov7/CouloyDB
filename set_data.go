@@ -59,3 +59,38 @@ func (db *DB) sADD(key, value []byte, duration time.Duration) error {
 	hashIndex.Put(value, pos)
 	return nil
 }
+
+func (db *DB) SMEMBERS(key []byte) ([][]byte, error) {
+	if len(key) == 0 {
+		return nil, public.ErrKeyIsEmpty
+	}
+
+	db.getIndexLockByType(data.Hash).RLock()
+	defer db.getIndexLockByType(data.Hash).RUnlock()
+
+	if db.ttl.isExpired(string(key)) {
+		// if the key is expired, just return and don't delete the key now
+		return nil, public.ErrKeyNotFound
+	}
+
+	values := db.ListMembers(key)
+
+	return values, nil
+}
+
+func (db *DB) ListMembers(key []byte) [][]byte {
+	db.getIndexLockByType(data.Hash).RLock()
+	defer db.getIndexLockByType(data.Hash).RUnlock()
+	hashIndex, ok := db.index.getHashIndex(string(key))
+	if !ok {
+		return nil
+	}
+	values := make([][]byte, hashIndex.Count())
+	iterator := hashIndex.Iterator(false)
+	var idx int
+	for iterator.Rewind(); iterator.Valid(); iterator.Next() {
+		values[idx] = iterator.Key()
+		idx++
+	}
+	return values
+}
