@@ -316,9 +316,6 @@ func TestDB_SADD(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Equal(t, count, 1)
 	values, err := couloyDB.SMEMBERS(bytex.GetTestKey(1))
-	if err != nil {
-		t.Fatalf(err.Error())
-	}
 	assert.NotNil(t, values)
 	assert.Nil(t, err)
 

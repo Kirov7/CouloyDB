@@ -9,53 +9,56 @@ import (
 	"github.com/Kirov7/CouloyDB/public/ds"
 )
 
-func (db *DB) SADD(key, member []byte) error {
-	return db.sADD(key, member, 0)
+func (db *DB) SADD(key []byte, members ...[]byte) error {
+	return db.sADD(0, key, members...)
 }
 
-func (db *DB) sADD(key, member []byte, duration time.Duration) error {
+func (db *DB) sADD(duration time.Duration, key []byte, members ...[]byte) error {
 	if err := checkKey(key); err != nil {
-		return err
-	}
-	if err := checkKey(member); err != nil {
 		return err
 	}
 
 	db.getIndexLockByType(data.Hash).Lock()
 	defer db.getIndexLockByType(data.Hash).Unlock()
 
-	var expiration int64
-	if duration != 0 {
-		expiration = time.Now().Add(duration).UnixNano()
-		db.ttl.add(ds.NewJob(string(key), time.Unix(0, expiration)))
-	} else {
-		// If it is a key without an expiration time set
-		// you may need to remove the previously set expiration time
-		db.ttl.del(string(key))
+	for _, member := range members {
+		if err := checkKey(member); err != nil {
+			continue
+		}
+
+		var expiration int64
+		if duration != 0 {
+			expiration = time.Now().Add(duration).UnixNano()
+			db.ttl.add(ds.NewJob(string(key), time.Unix(0, expiration)))
+		} else {
+			// If it is a key without an expiration time set
+			// you may need to remove the previously set expiration time
+			db.ttl.del(string(key))
+		}
+
+		logRecord := &data.LogRecord{
+			Key:        encodeKeyWithTxId(key, public.NO_TX_ID),
+			Value:      member,
+			DSType:     data.Hash,
+			Expiration: expiration,
+		}
+
+		pos, err := db.appendLogRecordWithLock(logRecord)
+		if err != nil {
+			return err
+		}
+
+		db.Notify(string(key), member, PutEvent)
+
+		var hashIndex meta.MemTable
+		hashIndex, ok := db.index.getHashIndex(string(key))
+		if !ok {
+			hashIndex = meta.NewHashMap()
+			db.index.setHashIndex(string(key), hashIndex)
+		}
+
+		hashIndex.Put(member, pos)
 	}
-
-	logRecord := &data.LogRecord{
-		Key:        encodeKeyWithTxId(key, public.NO_TX_ID),
-		Value:      member,
-		DSType:     data.Hash,
-		Expiration: expiration,
-	}
-
-	pos, err := db.appendLogRecordWithLock(logRecord)
-	if err != nil {
-		return err
-	}
-
-	db.Notify(string(key), member, PutEvent)
-
-	var hashIndex meta.MemTable
-	hashIndex, ok := db.index.getHashIndex(string(key))
-	if !ok {
-		hashIndex = meta.NewHashMap()
-		db.index.setHashIndex(string(key), hashIndex)
-	}
-
-	hashIndex.Put(member, pos)
 	return nil
 }
 
