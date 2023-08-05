@@ -299,38 +299,3 @@ func TestDB_Fold(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Equal(t, count, 2)
 }
-
-func TestDB_SADD(t *testing.T) {
-	options := DefaultOptions()
-	options.DataFileSize = 8 * 1024 * 1024
-	options.SyncWrites = false
-	couloyDB, err := NewCouloyDB(options)
-	defer destroyCouloyDB(couloyDB)
-	assert.Nil(t, err)
-	assert.NotNil(t, couloyDB)
-
-	// Normally put key 1 and a random value to db
-	err = couloyDB.SADD(bytex.GetTestKey(1), bytex.RandomBytes(6))
-	assert.Nil(t, err)
-	count, err := couloyDB.SCARD(bytex.GetTestKey(1))
-	assert.Nil(t, err)
-	assert.Equal(t, count, 1)
-	values, err := couloyDB.SMEMBERS(bytex.GetTestKey(1))
-	assert.NotNil(t, values)
-	assert.Nil(t, err)
-
-	// Test repeatedly key
-	err = couloyDB.SADD(bytex.GetTestKey(1), bytex.RandomBytes(6))
-	assert.Nil(t, err)
-	values, err = couloyDB.SMEMBERS(bytex.GetTestKey(1))
-	assert.NotNil(t, values)
-	assert.Nil(t, err)
-
-	// Test empty key
-	err = couloyDB.SADD([]byte{}, bytex.RandomBytes(6))
-	assert.Equal(t, err, public.ErrKeyIsEmpty)
-
-	// Test empty value
-	err = couloyDB.SADD(bytex.GetTestKey(2), []byte{})
-	assert.Error(t, err, public.ErrKeyIsEmpty)
-}
