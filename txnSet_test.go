@@ -45,7 +45,7 @@ func TestTxnSADD(t *testing.T) {
 		{
 			Name: "Set Multible Member",
 			Args: args{
-				key: []byte("multipleMember"),
+				key: []byte("saddMultipleMember"),
 				members: [][]byte{
 					[]byte("hoge"),
 					[]byte("fuga"),
@@ -63,7 +63,7 @@ func TestTxnSADD(t *testing.T) {
 		{
 			Name: "Set Duplicate Member",
 			Args: args{
-				key: []byte("duplicateMember"),
+				key: []byte("saddDuplicateMember"),
 				members: [][]byte{
 					[]byte("java"),
 					[]byte("java"),
@@ -99,7 +99,7 @@ func TestTxnSADD(t *testing.T) {
 		{
 			Name: "Set Empty Member",
 			Args: args{
-				key: []byte("emptyMember"),
+				key: []byte("saddEmptyMember"),
 				members: [][]byte{
 					[]byte(""),
 				},
@@ -142,7 +142,7 @@ func TestTxnSREM(t *testing.T) {
 		{
 			Name: "REM Single Member",
 			Args: args{
-				key: []byte("remSingleMember"),
+				key: []byte("sremSingleMember"),
 				members: [][]byte{
 					[]byte("hoge"),
 				},
@@ -157,7 +157,7 @@ func TestTxnSREM(t *testing.T) {
 		{
 			Name: "REM Multible Member",
 			Args: args{
-				key: []byte("remMultipleMember"),
+				key: []byte("sremMultipleMember"),
 				members: [][]byte{
 					[]byte("java"),
 					[]byte("golang"),
@@ -177,7 +177,7 @@ func TestTxnSREM(t *testing.T) {
 		{
 			Name: "REM Not Exist Member",
 			Args: args{
-				key: []byte("remNotExistMember"),
+				key: []byte("sremNotExistMember"),
 				members: [][]byte{
 					[]byte("java"),
 					[]byte("golang"),
@@ -249,7 +249,7 @@ func TestTxnSCARD(t *testing.T) {
 		{
 			Name: "Set Single Member",
 			Args: args{
-				key: []byte("singleMember"),
+				key: []byte("scardSingleMember"),
 				members: [][]byte{
 					[]byte("hoge"),
 				},
@@ -263,7 +263,7 @@ func TestTxnSCARD(t *testing.T) {
 		{
 			Name: "Set Multible Member",
 			Args: args{
-				key: []byte("multipleMember"),
+				key: []byte("scardMultipleMember"),
 				members: [][]byte{
 					[]byte("hoge"),
 					[]byte("fuga"),
@@ -281,7 +281,7 @@ func TestTxnSCARD(t *testing.T) {
 		{
 			Name: "Set Duplicate Member",
 			Args: args{
-				key: []byte("duplicateMember"),
+				key: []byte("scardDuplicateMember"),
 				members: [][]byte{
 					[]byte("java"),
 					[]byte("golang"),
@@ -338,7 +338,7 @@ func TestTxnSMEMBER(t *testing.T) {
 		{
 			Name: "Set Single Member",
 			Args: args{
-				key: []byte("singleMember"),
+				key: []byte("smemebreSingleMember"),
 				members: [][]byte{
 					[]byte("hoge"),
 				},
@@ -352,7 +352,7 @@ func TestTxnSMEMBER(t *testing.T) {
 		{
 			Name: "Set Multible Member",
 			Args: args{
-				key: []byte("multipleMember"),
+				key: []byte("smemebreMultipleMember"),
 				members: [][]byte{
 					[]byte("hoge"),
 					[]byte("fuga"),
@@ -370,7 +370,7 @@ func TestTxnSMEMBER(t *testing.T) {
 		{
 			Name: "Set Duplicate Member",
 			Args: args{
-				key: []byte("duplicateMember"),
+				key: []byte("smemberDuplicateMember"),
 				members: [][]byte{
 					[]byte("java"),
 					[]byte("java"),

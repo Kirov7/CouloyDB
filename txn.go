@@ -11,9 +11,6 @@ import (
 	"github.com/Kirov7/CouloyDB/meta"
 	"github.com/Kirov7/CouloyDB/public"
 	"github.com/Kirov7/CouloyDB/public/utils/wait"
-
-	"github.com/Kirov7/CouloyDB/data"
-	"github.com/Kirov7/CouloyDB/public"
 )
 
 type IsolationLevel uint8
@@ -290,9 +287,7 @@ func (txn *Txn) commit() error {
 		go txn.updateStrIndex()
 		go txn.updateHashIndex()
 		go txn.updateListIndex()
-
-		// TODO fix here
-		// txn.setSetIndex()
+		go txn.udpateSetIndex()
 
 		txn.waitCommit.Wait()
 
@@ -342,6 +337,28 @@ func (txn *Txn) updateHashIndex() {
 		if !ok {
 			txn.db.index.setHashIndex(key, meta.NewMemTable(txn.db.options.IndexType))
 			idx, _ = txn.db.index.getHashIndex(key)
+		}
+
+		for field, pw := range pendingWrites {
+			if pw.typ == data.LogRecordNormal {
+				idx.Put([]byte(field), pw.LogPos)
+			}
+			if pw.typ == data.LogRecordDeleted {
+				idx.Del([]byte(field))
+			}
+		}
+	}
+	txn.waitCommit.Done()
+}
+
+func (txn *Txn) udpateSetIndex() {
+	txn.waitCommit.Add(1)
+	for key, pendingWrites := range txn.setPendingWrites {
+
+		idx, ok := txn.db.index.getSetIndex(key)
+		if !ok {
+			txn.db.index.setSetIndex(key, meta.NewMemTable(txn.db.options.IndexType))
+			idx, _ = txn.db.index.getSetIndex(key)
 		}
 
 		for field, pw := range pendingWrites {

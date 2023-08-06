@@ -24,10 +24,10 @@ func (txn *Txn) SADD(key []byte, members ...[]byte) error {
 		}
 
 		logRecord := &data.LogRecord{
-			Key:    encodeKeyWithTxId(encodeFieldKey(key, member), txn.startTs),
-			Value:  member,
-			Type:   data.LogRecordNormal,
-			DSType: data.Set,
+			Key:      encodeKeyWithTxId(encodeFieldKey(key, member), txn.startTs),
+			Value:    member,
+			Type:     data.LogRecordNormal,
+			DataType: data.Set,
 		}
 
 		pos, err := txn.db.appendLogRecordWithLock(logRecord)
@@ -36,9 +36,9 @@ func (txn *Txn) SADD(key []byte, members ...[]byte) error {
 		}
 
 		if _, ok := txn.setPendingWrites[string(key)]; !ok {
-			txn.setPendingWrites[string(key)] = make(map[string]pendingWrite)
+			txn.setPendingWrites[string(key)] = make(map[string]*pendingWrite)
 		}
-		txn.setPendingWrites[string(key)][string(member)] = pendingWrite{typ: data.LogRecordNormal, LogPos: pos}
+		txn.setPendingWrites[string(key)][string(member)] = &pendingWrite{typ: data.LogRecordNormal, LogPos: pos}
 	}
 	return nil
 }
@@ -64,9 +64,9 @@ func (txn *Txn) SREM(key []byte, members ...[]byte) error {
 		}
 
 		logRecord := &data.LogRecord{
-			Key:    encodeKeyWithTxId(encodeFieldKey(key, member), txn.startTs),
-			Type:   data.LogRecordDeleted,
-			DSType: data.Set,
+			Key:      encodeKeyWithTxId(encodeFieldKey(key, member), txn.startTs),
+			Type:     data.LogRecordDeleted,
+			DataType: data.Set,
 		}
 
 		pos, err := txn.db.appendLogRecordWithLock(logRecord)
@@ -75,10 +75,10 @@ func (txn *Txn) SREM(key []byte, members ...[]byte) error {
 		}
 
 		if _, ok := txn.setPendingWrites[string(key)]; !ok {
-			txn.setPendingWrites[string(key)] = make(map[string]pendingWrite)
+			txn.setPendingWrites[string(key)] = make(map[string]*pendingWrite)
 		}
 
-		txn.setPendingWrites[string(key)][string(member)] = pendingWrite{typ: data.LogRecordDeleted, LogPos: pos}
+		txn.setPendingWrites[string(key)][string(member)] = &pendingWrite{typ: data.LogRecordDeleted, LogPos: pos}
 	}
 
 	return nil
