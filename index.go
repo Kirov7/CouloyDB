@@ -5,6 +5,7 @@ import (
 )
 
 type hashIndex map[string]meta.MemTable
+type setIndex map[string]meta.MemTable
 
 type listIndex struct {
 	metaIndex meta.MemTable // key to list metadata(head seq and tail seq)
@@ -15,6 +16,7 @@ type index struct {
 	strIndex  meta.MemTable
 	hashIndex hashIndex
 	listIndex listIndex
+	setIndex  setIndex
 }
 
 func (i *index) getStrIndex() meta.MemTable {
@@ -45,4 +47,15 @@ func (i *index) getListDataIndex(key string) (meta.MemTable, bool) {
 
 func (i *index) setListDataIndex(key string, memTable meta.MemTable) {
 	i.listIndex.dataIndex[key] = memTable
+}
+
+func (i *index) getSetIndex(key string) (meta.MemTable, bool) {
+	if idx, ok := i.setIndex[key]; ok {
+		return idx, ok
+	}
+	return nil, false
+}
+
+func (i *index) setSetIndex(key string, memTable meta.MemTable) {
+	i.setIndex[key] = memTable
 }

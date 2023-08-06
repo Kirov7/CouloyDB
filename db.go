@@ -67,6 +67,7 @@ func NewCouloyDB(opt Options) (*DB, error) {
 		oldFile: make(map[uint32]*data.DataFile),
 		index: &index{
 			hashIndex: make(map[string]meta.MemTable),
+			setIndex:  make(map[string]meta.MemTable),
 			strIndex:  meta.NewMemTable(opt.IndexType),
 			listIndex: listIndex{
 				metaIndex: meta.NewMemTable(opt.IndexType),
@@ -83,6 +84,7 @@ func NewCouloyDB(opt Options) (*DB, error) {
 
 	db.indexLocks[data.String] = &sync.RWMutex{}
 	db.indexLocks[data.Hash] = &sync.RWMutex{}
+	db.indexLocks[data.Set] = &sync.RWMutex{}
 
 	db.ttl = newTTL(func(key string) error {
 		return db.Del([]byte(key))
@@ -553,6 +555,21 @@ func (db *DB) loadIndex(fids []int) error {
 			} else {
 				db.index.getListMetaIndex().Put(key, pos)
 			}
+		case data.Set:
+			realKey, field := decodeFieldKey(log.Key)
+			var (
+				idx meta.MemTable
+				ok  bool
+			)
+			if idx, ok = db.index.getSetIndex(string(realKey)); !ok {
+				db.index.setSetIndex(string(realKey), meta.NewMemTable(db.options.IndexType))
+				idx, _ = db.index.getSetIndex(string(realKey))
+			}
+			if log.Type == data.LogRecordDeleted {
+				idx.Del(field)
+			} else {
+				idx.Put(field, pos)
+			}
 		}
 	}
 
@@ -719,6 +736,8 @@ func (db *DB) getIndexLockByType(typ data.DataType) *sync.RWMutex {
 		return db.indexLocks[data.String]
 	case data.Hash:
 		return db.indexLocks[data.Hash]
+	case data.Set:
+		return db.indexLocks[data.Set]
 	}
 	return nil
 }
