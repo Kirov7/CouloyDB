@@ -43,6 +43,47 @@ func (txn *Txn) SADD(key []byte, members ...[]byte) error {
 	return nil
 }
 
+func (txn *Txn) SREM(key []byte, members ...[]byte) error {
+	if txn.readOnly {
+		return public.ErrUpdateInReadOnlyTxn
+	}
+
+	for _, member := range members {
+		if pw, ok := txn.setPendingWrites[string(key)][string(member)]; ok {
+			if pw.typ == data.LogRecordDeleted {
+				return public.ErrKeyNotFound
+			}
+		} else {
+			if idx, ok := txn.db.index.getSetIndex(string(key)); !ok {
+				return public.ErrKeyNotFound
+			} else {
+				if pos := idx.Get(member); pos == nil {
+					return public.ErrKeyNotFound
+				}
+			}
+		}
+
+		logRecord := &data.LogRecord{
+			Key:    encodeKeyWithTxId(encodeFieldKey(key, member), txn.startTs),
+			Type:   data.LogRecordDeleted,
+			DSType: data.Set,
+		}
+
+		pos, err := txn.db.appendLogRecordWithLock(logRecord)
+		if err != nil {
+			return err
+		}
+
+		if _, ok := txn.setPendingWrites[string(key)]; !ok {
+			txn.setPendingWrites[string(key)] = make(map[string]pendingWrite)
+		}
+
+		txn.setPendingWrites[string(key)][string(member)] = pendingWrite{typ: data.LogRecordDeleted, LogPos: pos}
+	}
+
+	return nil
+}
+
 func (txn *Txn) SMEMBERS(key []byte) ([][]byte, error) {
 	members := make([][]byte, 0)
 

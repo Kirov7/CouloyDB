@@ -119,6 +119,114 @@ func TestTxnSADD(t *testing.T) {
 	}
 }
 
+func TestTxnSREM(t *testing.T) {
+	db, err := NewCouloyDB(DefaultOptions())
+	assert.Nil(t, err)
+	assert.NotNil(t, db)
+	defer destroyCouloyDB(db)
+
+	type args struct {
+		key        []byte
+		members    [][]byte
+		remMembers [][]byte
+	}
+	type want struct {
+		Error    error
+		expected [][]byte
+	}
+	tests := []struct {
+		Name string
+		Args args
+		Want want
+	}{
+		{
+			Name: "REM Single Member",
+			Args: args{
+				key: []byte("remSingleMember"),
+				members: [][]byte{
+					[]byte("hoge"),
+				},
+				remMembers: [][]byte{
+					[]byte("hoge"),
+				},
+			},
+			Want: want{
+				expected: [][]byte{},
+			},
+		},
+		{
+			Name: "REM Multible Member",
+			Args: args{
+				key: []byte("remMultipleMember"),
+				members: [][]byte{
+					[]byte("java"),
+					[]byte("golang"),
+					[]byte("rust"),
+				},
+				remMembers: [][]byte{
+					[]byte("java"),
+					[]byte("golang"),
+				},
+			},
+			Want: want{
+				expected: [][]byte{
+					[]byte("rust"),
+				},
+			},
+		},
+		{
+			Name: "REM Not Exist Member",
+			Args: args{
+				key: []byte("remNotExistMember"),
+				members: [][]byte{
+					[]byte("java"),
+					[]byte("golang"),
+					[]byte("rust"),
+				},
+				remMembers: [][]byte{
+					[]byte("python"),
+				},
+			},
+			Want: want{
+				Error: public.ErrKeyNotFound,
+				expected: [][]byte{
+					[]byte("java"),
+					[]byte("golang"),
+					[]byte("rust"),
+				},
+			},
+		},
+	}
+	// prepare the data
+	for _, test := range tests {
+		err = db.SerialTransaction(false, func(txn *Txn) error {
+			err := txn.SADD(test.Args.key, test.Args.members...)
+			return err
+		})
+		assert.Nil(t, err)
+	}
+
+	// execute SREM
+	for _, test := range tests {
+		err = db.SerialTransaction(false, func(txn *Txn) error {
+			err := txn.SREM(test.Args.key, test.Args.remMembers...)
+			return err
+		})
+		assert.Equal(t, err, test.Want.Error)
+	}
+
+	// check the data
+	for _, test := range tests {
+		err = db.SerialTransaction(false, func(txn *Txn) error {
+			members, err := txn.SMEMBERS(test.Args.key)
+			ok := compareSlices(members, test.Want.expected)
+			assert.True(t, ok)
+			return err
+		})
+		assert.Nil(t, err)
+	}
+}
+
 func TestTxnSCARD(t *testing.T) {
 	db, err := NewCouloyDB(DefaultOptions())
 	assert.Nil(t, err)
@@ -176,10 +284,7 @@ func TestTxnSCARD(t *testing.T) {
 				key: []byte("duplicateMember"),
 				members: [][]byte{
 					[]byte("java"),
-					[]byte("java"),
 					[]byte("golang"),
-					[]byte("golang"),
-					[]byte("rust"),
 					[]byte("rust"),
 				},
 			},
