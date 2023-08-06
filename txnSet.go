@@ -94,6 +94,17 @@ func (txn *Txn) SMEMBERS(key []byte) ([][]byte, error) {
 
 	iterator := setIdx.Iterator(false)
 	for iterator.Rewind(); iterator.Valid(); iterator.Next() {
+		if pw, ok := txn.setPendingWrites[string(key)][string(iterator.Key())]; ok {
+			if pw.typ != data.LogRecordDeleted {
+				_, err := txn.db.getValueByPos(pw.LogPos)
+				if err != nil {
+					return nil, err
+				}
+				members = append(members, iterator.Key())
+			}
+			continue
+		}
+
 		v, err := txn.db.getValueByPos(iterator.Value())
 		if err != nil {
 			return nil, err
@@ -113,6 +124,17 @@ func (txn *Txn) SCARD(key []byte) (int64, error) {
 	iterator := setIdx.Iterator(false)
 
 	for iterator.Rewind(); iterator.Valid(); iterator.Next() {
+		if pw, ok := txn.setPendingWrites[string(key)][string(iterator.Key())]; ok {
+			if pw.typ != data.LogRecordDeleted {
+				_, err := txn.db.getValueByPos(pw.LogPos)
+				if err != nil {
+					return 0, err
+				}
+				count++
+			}
+			continue
+		}
+
 		_, err := txn.db.getValueByPos(iterator.Value())
 		if err != nil {
 			return 0, err
