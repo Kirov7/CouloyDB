@@ -1,9 +1,9 @@
 package CouloyDB
 
 import (
-	"encoding/binary"
 	"github.com/Kirov7/CouloyDB/data"
 	"github.com/Kirov7/CouloyDB/public"
+	"github.com/Kirov7/CouloyDB/public/utils/bytex"
 )
 
 func (txn *Txn) HSet(key, field, value []byte) error {
@@ -243,24 +243,9 @@ func (txn *Txn) HLen(key []byte) (int64, error) {
 }
 
 func encodeFieldKey(key, field []byte) []byte {
-	header := make([]byte, binary.MaxVarintLen64*2)
-	var index int
-	index += binary.PutVarint(header[index:], int64(len(key)))
-	index += binary.PutVarint(header[index:], int64(len(field)))
-	length := len(key) + len(field)
-	buf := make([]byte, length+index)
-	copy(buf[:index], header[:index])
-	copy(buf[index:index+len(key)], key)
-	copy(buf[index+len(key):], field)
-	return buf
+	return bytex.EncodeByteSlices(key, field)
 }
 
 func decodeFieldKey(key []byte) ([]byte, []byte) {
-	var index int
-	keySize, i := binary.Varint(key[index:])
-	index += i
-	_, i = binary.Varint(key[index:])
-	index += i
-	sep := index + int(keySize)
-	return key[index:sep], key[sep:]
+	return bytex.DecodeByteSlices(key)
 }
