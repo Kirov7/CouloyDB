@@ -118,9 +118,10 @@ func (db *DB) merge() error {
 			case data.ListMeta:
 				logRecordPos = db.index.getListMetaIndex().Get(realKey)
 			case data.Set:
-				realKey, field := decodeFieldKey(realKey)
+				realKey, member := decodeMemberKey(realKey)
+				hashKey := hashMemberKey(realKey, member)
 				if idx, ok := db.index.getSetIndex(string(realKey)); ok {
-					logRecordPos = idx.Get(field)
+					logRecordPos = idx.Get(hashKey)
 				}
 			}
 			// compare with the memTable, if the already exist in memTable then rewrite it

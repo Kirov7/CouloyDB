@@ -556,7 +556,7 @@ func (db *DB) loadIndex(fids []int) error {
 				db.index.getListMetaIndex().Put(key, pos)
 			}
 		case data.Set:
-			realKey, field := decodeFieldKey(log.Key)
+			realKey, member := decodeMemberKey(log.Key)
 			var (
 				idx meta.MemTable
 				ok  bool
@@ -565,10 +565,11 @@ func (db *DB) loadIndex(fids []int) error {
 				db.index.setSetIndex(string(realKey), meta.NewMemTable(db.options.IndexType))
 				idx, _ = db.index.getSetIndex(string(realKey))
 			}
+			hashKey := hashMemberKey(realKey, member)
 			if log.Type == data.LogRecordDeleted {
-				idx.Del(field)
+				idx.Del(hashKey)
 			} else {
-				idx.Put(field, pos)
+				idx.Put(hashKey, pos)
 			}
 		}
 	}

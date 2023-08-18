@@ -361,12 +361,12 @@ func (txn *Txn) udpateSetIndex() {
 			idx, _ = txn.db.index.getSetIndex(key)
 		}
 
-		for field, pw := range pendingWrites {
+		for hashKey, pw := range pendingWrites {
 			if pw.typ == data.LogRecordNormal {
-				idx.Put([]byte(field), pw.LogPos)
+				idx.Put([]byte(hashKey), pw.LogPos)
 			}
 			if pw.typ == data.LogRecordDeleted {
-				idx.Del([]byte(field))
+				idx.Del([]byte(hashKey))
 			}
 		}
 	}
@@ -398,20 +398,6 @@ func (txn *Txn) updateListIndex() {
 		}
 	}
 	txn.waitCommit.Done()
-}
-
-func (txn *Txn) setSetIndex() {
-	for key, pendingWrites := range txn.setPendingWrites {
-		idx, _ := txn.db.index.getSetIndex(key)
-		for member, pw := range pendingWrites {
-			if pw.typ == data.LogRecordNormal {
-				idx.Put([]byte(member), pw.LogPos)
-			}
-			if pw.typ == data.LogRecordDeleted {
-				idx.Del([]byte(member))
-			}
-		}
-	}
 }
 
 // Get the key first in pendingWrites, if not then in db

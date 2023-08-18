@@ -1,12 +1,16 @@
 package consistent
 
 import (
+	"bytes"
+	"encoding/binary"
 	"errors"
 	"hash/crc32"
 	"hash/fnv"
 	"sort"
 	"strconv"
 	"sync"
+
+	"golang.org/x/exp/constraints"
 )
 
 type uints []uint32
@@ -217,6 +221,11 @@ func (c *Consistent) GetN(name string, n int) ([]string, error) {
 	return res, nil
 }
 
+func (c *Consistent) HashKey(key string) []byte {
+	hashKey := c.hashKey(key)
+	return castNumToByte(hashKey)
+}
+
 func (c *Consistent) hashKey(key string) uint32 {
 	if c.UseFnv {
 		return c.hashKeyFnv(key)
@@ -259,4 +268,14 @@ func sliceContainsMember(set []string, member string) bool {
 		}
 	}
 	return false
+}
+
+type Number interface {
+	constraints.Integer | constraints.Float | constraints.Complex
+}
+
+func castNumToByte[K Number](num K) []byte {
+	buf := new(bytes.Buffer)
+	binary.Write(buf, binary.BigEndian, num)
+	return buf.Bytes()
 }

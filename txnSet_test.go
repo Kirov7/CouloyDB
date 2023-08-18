@@ -377,6 +377,7 @@ func TestTxnSMEMBER(t *testing.T) {
 					[]byte("golang"),
 					[]byte("golang"),
 					[]byte("rust"),
+					[]byte("rust"),
 				},
 			},
 			Want: want{

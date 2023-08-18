@@ -4,6 +4,8 @@ import (
 	"github.com/Kirov7/CouloyDB/data"
 	"github.com/Kirov7/CouloyDB/meta"
 	"github.com/Kirov7/CouloyDB/public"
+	"github.com/Kirov7/CouloyDB/public/utils/bytex"
+	"github.com/Kirov7/CouloyDB/public/utils/consistent"
 )
 
 func (txn *Txn) SADD(key []byte, members ...[]byte) error {
@@ -24,7 +26,7 @@ func (txn *Txn) SADD(key []byte, members ...[]byte) error {
 		}
 
 		logRecord := &data.LogRecord{
-			Key:      encodeKeyWithTxId(encodeFieldKey(key, member), txn.startTs),
+			Key:      encodeKeyWithTxId(encodeMemberKey(key, member), txn.startTs),
 			Value:    member,
 			Type:     data.LogRecordNormal,
 			DataType: data.Set,
@@ -38,7 +40,9 @@ func (txn *Txn) SADD(key []byte, members ...[]byte) error {
 		if _, ok := txn.setPendingWrites[string(key)]; !ok {
 			txn.setPendingWrites[string(key)] = make(map[string]*pendingWrite)
 		}
-		txn.setPendingWrites[string(key)][string(member)] = &pendingWrite{typ: data.LogRecordNormal, LogPos: pos}
+
+		hashKey := hashMemberKey(key, member)
+		txn.setPendingWrites[string(key)][string(hashKey)] = &pendingWrite{typ: data.LogRecordNormal, LogPos: pos}
 	}
 	return nil
 }
@@ -49,6 +53,7 @@ func (txn *Txn) SREM(key []byte, members ...[]byte) error {
 	}
 
 	for _, member := range members {
+		hashKey := hashMemberKey(key, member)
 		if pw, ok := txn.setPendingWrites[string(key)][string(member)]; ok {
 			if pw.typ == data.LogRecordDeleted {
 				return public.ErrKeyNotFound
@@ -57,14 +62,14 @@ func (txn *Txn) SREM(key []byte, members ...[]byte) error {
 			if idx, ok := txn.db.index.getSetIndex(string(key)); !ok {
 				return public.ErrKeyNotFound
 			} else {
-				if pos := idx.Get(member); pos == nil {
+				if pos := idx.Get(hashKey); pos == nil {
 					return public.ErrKeyNotFound
 				}
 			}
 		}
 
 		logRecord := &data.LogRecord{
-			Key:      encodeKeyWithTxId(encodeFieldKey(key, member), txn.startTs),
+			Key:      encodeKeyWithTxId(encodeMemberKey(key, member), txn.startTs),
 			Type:     data.LogRecordDeleted,
 			DataType: data.Set,
 		}
@@ -78,7 +83,7 @@ func (txn *Txn) SREM(key []byte, members ...[]byte) error {
 			txn.setPendingWrites[string(key)] = make(map[string]*pendingWrite)
 		}
 
-		txn.setPendingWrites[string(key)][string(member)] = &pendingWrite{typ: data.LogRecordDeleted, LogPos: pos}
+		txn.setPendingWrites[string(key)][string(hashKey)] = &pendingWrite{typ: data.LogRecordDeleted, LogPos: pos}
 	}
 
 	return nil
@@ -86,30 +91,27 @@ func (txn *Txn) SREM(key []byte, members ...[]byte) error {
 
 func (txn *Txn) SMEMBERS(key []byte) ([][]byte, error) {
 	members := make([][]byte, 0)
-
-	setIdx, ok := txn.db.index.getSetIndex(string(key))
-	if !ok {
-		return nil, public.ErrKeyNotFound
+	for _, pw := range txn.setPendingWrites[string(key)] {
+		if pw.typ != data.LogRecordDeleted {
+			v, err := txn.db.getValueByPos(pw.LogPos)
+			if err != nil {
+				return nil, err
+			}
+			members = append(members, v)
+		}
 	}
 
-	iterator := setIdx.Iterator(false)
-	for iterator.Rewind(); iterator.Valid(); iterator.Next() {
-		if pw, ok := txn.setPendingWrites[string(key)][string(iterator.Key())]; ok {
-			if pw.typ != data.LogRecordDeleted {
-				_, err := txn.db.getValueByPos(pw.LogPos)
-				if err != nil {
-					return nil, err
-				}
-				members = append(members, iterator.Key())
-			}
-			continue
-		}
+	if setIdx, ok := txn.db.index.getSetIndex(string(key)); ok {
+		iterator := setIdx.Iterator(false)
 
-		v, err := txn.db.getValueByPos(iterator.Value())
-		if err != nil {
-			return nil, err
+		for iterator.Rewind(); iterator.Valid(); iterator.Next() {
+			v, err := txn.db.getValueByPos(iterator.Value())
+			if err != nil {
+				return nil, err
+			}
+			members = append(members, v)
+
 		}
-		members = append(members, v)
 	}
 	return members, nil
 }
@@ -142,4 +144,18 @@ func (txn *Txn) SCARD(key []byte) (int64, error) {
 		count++
 	}
 	return count, nil
+}
+
+func hashMemberKey(key, member []byte) []byte {
+	c := consistent.New()
+	encodeKey := encodeMemberKey(key, member)
+	return c.HashKey(string(encodeKey))
+}
+
+func encodeMemberKey(key, member []byte) []byte {
+	return bytex.EncodeByteSlices(key, member)
+}
+
+func decodeMemberKey(data []byte) ([]byte, []byte) {
+	return bytex.DecodeByteSlices(data)
 }
