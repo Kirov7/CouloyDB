@@ -4,12 +4,6 @@ import (
 	"context"
 	"encoding/binary"
 	"errors"
-	"github.com/Kirov7/CouloyDB/data"
-	"github.com/Kirov7/CouloyDB/meta"
-	"github.com/Kirov7/CouloyDB/public"
-	"github.com/Kirov7/CouloyDB/public/ds"
-	"github.com/gofrs/flock"
-	lua "github.com/yuin/gopher-lua"
 	"io"
 	"os"
 	"path/filepath"
@@ -19,6 +13,13 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/Kirov7/CouloyDB/data"
+	"github.com/Kirov7/CouloyDB/meta"
+	"github.com/Kirov7/CouloyDB/public"
+	"github.com/Kirov7/CouloyDB/public/ds"
+	"github.com/gofrs/flock"
+	lua "github.com/yuin/gopher-lua"
 )
 
 type DB struct {
@@ -66,6 +67,7 @@ func NewCouloyDB(opt Options) (*DB, error) {
 		oldFile: make(map[uint32]*data.DataFile),
 		index: &index{
 			hashIndex: make(map[string]meta.MemTable),
+			setIndex:  make(map[string]meta.MemTable),
 			strIndex:  meta.NewMemTable(opt.IndexType),
 			listIndex: listIndex{
 				metaIndex: meta.NewMemTable(opt.IndexType),
@@ -81,6 +83,8 @@ func NewCouloyDB(opt Options) (*DB, error) {
 	}
 
 	db.indexLocks[data.String] = &sync.RWMutex{}
+	db.indexLocks[data.Hash] = &sync.RWMutex{}
+	db.indexLocks[data.Set] = &sync.RWMutex{}
 
 	db.ttl = newTTL(func(key string) error {
 		return db.Del([]byte(key))
@@ -551,6 +555,22 @@ func (db *DB) loadIndex(fids []int) error {
 			} else {
 				db.index.getListMetaIndex().Put(key, pos)
 			}
+		case data.Set:
+			realKey, member := decodeMemberKey(log.Key)
+			var (
+				idx meta.MemTable
+				ok  bool
+			)
+			if idx, ok = db.index.getSetIndex(string(realKey)); !ok {
+				db.index.setSetIndex(string(realKey), meta.NewMemTable(db.options.IndexType))
+				idx, _ = db.index.getSetIndex(string(realKey))
+			}
+			hashKey := hashMemberKey(realKey, member)
+			if log.Type == data.LogRecordDeleted {
+				idx.Del(hashKey)
+			} else {
+				idx.Put(hashKey, pos)
+			}
 		}
 	}
 
@@ -715,6 +735,10 @@ func (db *DB) getIndexLockByType(typ data.DataType) *sync.RWMutex {
 	switch typ {
 	case data.String:
 		return db.indexLocks[data.String]
+	case data.Hash:
+		return db.indexLocks[data.Hash]
+	case data.Set:
+		return db.indexLocks[data.Set]
 	}
 	return nil
 }

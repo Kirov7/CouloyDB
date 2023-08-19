@@ -2,12 +2,13 @@ package CouloyDB
 
 import (
 	"fmt"
+	"os"
+	"testing"
+
 	"github.com/Kirov7/CouloyDB/public"
 	"github.com/Kirov7/CouloyDB/public/utils/bytex"
 	"github.com/Kirov7/CouloyDB/public/utils/wait"
 	"github.com/stretchr/testify/assert"
-	"os"
-	"testing"
 )
 
 func destroyCouloyDB(db *DB) {

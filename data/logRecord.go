@@ -22,6 +22,7 @@ const (
 	Hash
 	List
 	ListMeta
+	Set
 )
 
 const (

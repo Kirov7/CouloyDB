@@ -1,14 +1,15 @@
 package CouloyDB
 
 import (
-	"github.com/Kirov7/CouloyDB/data"
-	"github.com/Kirov7/CouloyDB/public"
 	"io"
 	"os"
 	"path"
 	"path/filepath"
 	"sort"
 	"strconv"
+
+	"github.com/Kirov7/CouloyDB/data"
+	"github.com/Kirov7/CouloyDB/public"
 )
 
 func (db *DB) Merge() error {
@@ -116,6 +117,12 @@ func (db *DB) merge() error {
 				}
 			case data.ListMeta:
 				logRecordPos = db.index.getListMetaIndex().Get(realKey)
+			case data.Set:
+				realKey, member := decodeMemberKey(realKey)
+				hashKey := hashMemberKey(realKey, member)
+				if idx, ok := db.index.getSetIndex(string(realKey)); ok {
+					logRecordPos = idx.Get(hashKey)
+				}
 			}
 			// compare with the memTable, if the already exist in memTable then rewrite it
 			if logRecordPos != nil && logRecordPos.Fid == oldFile.FileId && logRecordPos.Offset == offset {

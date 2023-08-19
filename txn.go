@@ -2,14 +2,15 @@ package CouloyDB
 
 import (
 	"container/heap"
-	"github.com/Kirov7/CouloyDB/data"
-	"github.com/Kirov7/CouloyDB/meta"
-	"github.com/Kirov7/CouloyDB/public"
-	"github.com/Kirov7/CouloyDB/public/utils/wait"
 	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/Kirov7/CouloyDB/data"
+	"github.com/Kirov7/CouloyDB/meta"
+	"github.com/Kirov7/CouloyDB/public"
+	"github.com/Kirov7/CouloyDB/public/utils/wait"
 )
 
 type IsolationLevel uint8
@@ -45,7 +46,7 @@ func (db *DB) initOracle() *oracle {
 }
 
 func (o *oracle) hasConflict(txn *Txn) bool {
-	if len(txn.strPendingWrites) == 0 && len(txn.hashPendingWrites) == 0 {
+	if len(txn.strPendingWrites) == 0 && len(txn.hashPendingWrites) == 0 && len(txn.setPendingWrites) == 0 {
 		return false
 	}
 
@@ -66,6 +67,14 @@ func (o *oracle) hasConflict(txn *Txn) bool {
 		for key, pendingWrites := range txn.hashPendingWrites {
 			for field := range pendingWrites {
 				if _, has := committedTxn.hashPendingWrites[key][field]; has {
+					return true
+				}
+			}
+		}
+
+		for key, pendingWrites := range txn.setPendingWrites {
+			for member := range pendingWrites {
+				if _, has := committedTxn.setPendingWrites[key][member]; has {
 					return true
 				}
 			}
@@ -165,6 +174,7 @@ type Txn struct {
 	// Record operations on each data structure separately
 	strPendingWrites  map[string]*pendingWrite
 	hashPendingWrites map[string]map[string]*pendingWrite // key to field to pendingWrite
+	setPendingWrites  map[string]map[string]*pendingWrite // key to member to pendingWrite
 
 	listMetaPendingWrites map[string]*pendingWrite
 	listDataPendingWrites map[string]map[string]*pendingWrite
@@ -180,6 +190,7 @@ func newTxn(readOnly bool, db *DB, isolationLevel IsolationLevel) *Txn {
 		isolationLevel:        isolationLevel,
 		strPendingWrites:      make(map[string]*pendingWrite),
 		hashPendingWrites:     make(map[string]map[string]*pendingWrite),
+		setPendingWrites:      make(map[string]map[string]*pendingWrite),
 		listMetaPendingWrites: make(map[string]*pendingWrite),
 		listDataPendingWrites: make(map[string]map[string]*pendingWrite),
 		waitCommit:            wait.NewWait(),
@@ -276,6 +287,8 @@ func (txn *Txn) commit() error {
 		go txn.updateStrIndex()
 		go txn.updateHashIndex()
 		go txn.updateListIndex()
+		go txn.updateSetIndex()
+
 		txn.waitCommit.Wait()
 
 		// the real commit
@@ -332,6 +345,28 @@ func (txn *Txn) updateHashIndex() {
 			}
 			if pw.typ == data.LogRecordDeleted {
 				idx.Del([]byte(field))
+			}
+		}
+	}
+	txn.waitCommit.Done()
+}
+
+func (txn *Txn) updateSetIndex() {
+	txn.waitCommit.Add(1)
+	for key, pendingWrites := range txn.setPendingWrites {
+
+		idx, ok := txn.db.index.getSetIndex(key)
+		if !ok {
+			txn.db.index.setSetIndex(key, meta.NewMemTable(txn.db.options.IndexType))
+			idx, _ = txn.db.index.getSetIndex(key)
+		}
+
+		for hashKey, pw := range pendingWrites {
+			if pw.typ == data.LogRecordNormal {
+				idx.Put([]byte(hashKey), pw.LogPos)
+			}
+			if pw.typ == data.LogRecordDeleted {
+				idx.Del([]byte(hashKey))
 			}
 		}
 	}
