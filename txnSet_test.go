@@ -112,7 +112,7 @@ func TestTxnSADD(t *testing.T) {
 	}
 	for _, test := range tests {
 		err = db.SerialTransaction(false, func(txn *Txn) error {
-			err := txn.SADD(test.Args.key, test.Args.members...)
+			err := txn.SAdd(test.Args.key, test.Args.members...)
 			return err
 		})
 		assert.Equal(t, test.Want.Error, err)
@@ -200,7 +200,7 @@ func TestTxnSREM(t *testing.T) {
 	// prepare the data
 	for _, test := range tests {
 		err = db.SerialTransaction(false, func(txn *Txn) error {
-			err := txn.SADD(test.Args.key, test.Args.members...)
+			err := txn.SAdd(test.Args.key, test.Args.members...)
 			return err
 		})
 		assert.Nil(t, err)
@@ -209,7 +209,7 @@ func TestTxnSREM(t *testing.T) {
 	// execute SREM
 	for _, test := range tests {
 		err = db.SerialTransaction(false, func(txn *Txn) error {
-			err := txn.SREM(test.Args.key, test.Args.remMembers...)
+			err := txn.SRem(test.Args.key, test.Args.remMembers...)
 			return err
 		})
 		assert.Equal(t, err, test.Want.Error)
@@ -218,7 +218,7 @@ func TestTxnSREM(t *testing.T) {
 	// check the data
 	for _, test := range tests {
 		err = db.SerialTransaction(false, func(txn *Txn) error {
-			members, err := txn.SMEMBERS(test.Args.key)
+			members, err := txn.SMembers(test.Args.key)
 			ok := compareSlices(members, test.Want.expected)
 			assert.True(t, ok)
 			return err
@@ -300,7 +300,7 @@ func TestTxnSCARD(t *testing.T) {
 	// prepare the data
 	for _, test := range tests {
 		err = db.SerialTransaction(false, func(txn *Txn) error {
-			err := txn.SADD(test.Args.key, test.Args.members...)
+			err := txn.SAdd(test.Args.key, test.Args.members...)
 			return err
 		})
 		assert.Nil(t, err)
@@ -308,7 +308,7 @@ func TestTxnSCARD(t *testing.T) {
 
 	for _, test := range tests {
 		err = db.SerialTransaction(false, func(txn *Txn) error {
-			count, err := txn.SCARD(test.Args.key)
+			count, err := txn.SCard(test.Args.key)
 			assert.Equal(t, len(test.Want.expected), int(count))
 			return err
 		})
@@ -392,7 +392,7 @@ func TestTxnSMEMBER(t *testing.T) {
 	// prepare the data
 	for _, test := range tests {
 		err = db.SerialTransaction(false, func(txn *Txn) error {
-			err := txn.SADD(test.Args.key, test.Args.members...)
+			err := txn.SAdd(test.Args.key, test.Args.members...)
 			return err
 		})
 		assert.Nil(t, err)
@@ -400,7 +400,7 @@ func TestTxnSMEMBER(t *testing.T) {
 
 	for _, test := range tests {
 		err = db.SerialTransaction(false, func(txn *Txn) error {
-			members, err := txn.SMEMBERS(test.Args.key)
+			members, err := txn.SMembers(test.Args.key)
 			ok := compareSlices(members, test.Want.expected)
 			assert.True(t, ok)
 			return err

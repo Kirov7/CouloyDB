@@ -8,7 +8,7 @@ import (
 	"github.com/Kirov7/CouloyDB/public/utils/consistent"
 )
 
-func (txn *Txn) SADD(key []byte, members ...[]byte) error {
+func (txn *Txn) SAdd(key []byte, members ...[]byte) error {
 	if err := checkKey(key); err != nil {
 		return err
 	}
@@ -47,7 +47,7 @@ func (txn *Txn) SADD(key []byte, members ...[]byte) error {
 	return nil
 }
 
-func (txn *Txn) SREM(key []byte, members ...[]byte) error {
+func (txn *Txn) SRem(key []byte, members ...[]byte) error {
 	if txn.readOnly {
 		return public.ErrUpdateInReadOnlyTxn
 	}
@@ -89,7 +89,7 @@ func (txn *Txn) SREM(key []byte, members ...[]byte) error {
 	return nil
 }
 
-func (txn *Txn) SMEMBERS(key []byte) ([][]byte, error) {
+func (txn *Txn) SMembers(key []byte) ([][]byte, error) {
 	members := make([][]byte, 0)
 	for _, pw := range txn.setPendingWrites[string(key)] {
 		if pw.typ != data.LogRecordDeleted {
@@ -116,7 +116,7 @@ func (txn *Txn) SMEMBERS(key []byte) ([][]byte, error) {
 	return members, nil
 }
 
-func (txn *Txn) SCARD(key []byte) (int64, error) {
+func (txn *Txn) SCard(key []byte) (int64, error) {
 	var count int64
 	setIdx, ok := txn.db.index.getSetIndex(string(key))
 	if !ok {

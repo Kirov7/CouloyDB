@@ -287,7 +287,7 @@ func (txn *Txn) commit() error {
 		go txn.updateStrIndex()
 		go txn.updateHashIndex()
 		go txn.updateListIndex()
-		go txn.udpateSetIndex()
+		go txn.updateSetIndex()
 
 		txn.waitCommit.Wait()
 
@@ -351,7 +351,7 @@ func (txn *Txn) updateHashIndex() {
 	txn.waitCommit.Done()
 }
 
-func (txn *Txn) udpateSetIndex() {
+func (txn *Txn) updateSetIndex() {
 	txn.waitCommit.Add(1)
 	for key, pendingWrites := range txn.setPendingWrites {
 
