@@ -105,7 +105,7 @@ func (ttl *ttl) exec() {
 
 	go func() {
 		if err := ttl.deleter(job.Key); err != nil {
-			log.Printf("there is a error occured by deleter: %v", err.Error())
+			log.Printf("there is a error occurred by deleter: %v", err.Error())
 		}
 	}()
 }
